@@ -27,14 +27,32 @@ export declare class SitesService {
         wooConsumerKey: string;
         wooConsumerSecret: string;
     }, never, import("@prisma/client/runtime/library").DefaultArgs, import("@prisma/client").Prisma.PrismaClientOptions>;
-    remove(userId: string, id: string): import("@prisma/client").Prisma.Prisma__SiteClient<{
+    remove(userId: string, id: string): Promise<{
+        removed: number;
+    }>;
+    getCategoryMappings(siteId: string, userId: string): Promise<{
         id: string;
         createdAt: Date;
         updatedAt: Date;
-        name: string;
-        userId: string;
-        baseUrl: string;
-        wooConsumerKey: string;
-        wooConsumerSecret: string;
-    }, never, import("@prisma/client/runtime/library").DefaultArgs, import("@prisma/client").Prisma.PrismaClientOptions>;
+        siteId: string;
+        sourceName: string;
+        targetId: string;
+        targetName: string;
+    }[]>;
+    createCategoryMapping(userId: string, siteId: string, input: {
+        sourceName: string;
+        targetId: string;
+        targetName: string;
+    }): Promise<{
+        id: string;
+        createdAt: Date;
+        updatedAt: Date;
+        siteId: string;
+        sourceName: string;
+        targetId: string;
+        targetName: string;
+    }>;
+    deleteCategoryMapping(userId: string, siteId: string, mappingId: string): Promise<{
+        removed: number;
+    }>;
 }

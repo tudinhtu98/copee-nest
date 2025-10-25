@@ -28,37 +28,42 @@ model User {
   id           String        @id @default(cuid())
   email        String        @unique
   username     String        @unique
-  passwordHash String
+  passwordHash String        @map("password_hash")
   role         UserRole      @default(USER)
   balance      Int           @default(0)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt      @map("updated_at")
 
   products     Product[]
   sites        Site[]
   transactions Transaction[]
+
+  @@map("users")
 }
 
 model Site {
-  id               String   @id @default(cuid())
-  user             User     @relation(fields: [userId], references: [id])
-  userId           String
-  name             String
-  baseUrl          String
-  wooConsumerKey   String
-  wooConsumerSecret String
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                String   @id @default(cuid())
+  user              User     @relation(fields: [userId], references: [id])
+  userId            String   @map("user_id")
+  name              String
+  baseUrl           String   @map("base_url")
+  wooConsumerKey    String   @map("woo_consumer_key")
+  wooConsumerSecret String   @map("woo_consumer_secret")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt      @map("updated_at")
 
-  uploads          UploadJob[]
+  uploads       UploadJob[]
+  categoryMappings CategoryMapping[]
+
+  @@map("sites")
 }
 
 model Product {
   id           String         @id @default(cuid())
   user         User           @relation(fields: [userId], references: [id])
-  userId       String
-  sourceShop   String
-  sourceUrl    String
+  userId       String         @map("user_id")
+  sourceShop   String         @map("source_shop")
+  sourceUrl    String         @map("source_url")
   title        String
   description  String?
   images       Json?
@@ -66,34 +71,56 @@ model Product {
   currency     String?
   category     String?
   status       ProductStatus  @default(DRAFT)
-  errorMessage String?
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
+  errorMessage String?        @map("error_message")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt      @map("updated_at")
 
   uploads      UploadJob[]
+
+  @@map("products")
 }
 
 model UploadJob {
   id             String   @id @default(cuid())
   product        Product  @relation(fields: [productId], references: [id])
-  productId      String
+  productId      String   @map("product_id")
   site           Site     @relation(fields: [siteId], references: [id])
-  siteId         String
-  targetCategory String?
+  siteId         String   @map("site_id")
+  targetCategory String? @map("target_category")
   payload        Json?
   result         Json?
   status         String   @default("PENDING")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  retryCount     Int      @default(0) @map("retry_count")
+  lastRetryAt    DateTime? @map("last_retry_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt      @map("updated_at")
+
+  @@map("upload_jobs")
 }
 
 model Transaction {
   id          String   @id @default(cuid())
   user        User     @relation(fields: [userId], references: [id])
-  userId      String
+  userId      String   @map("user_id")
   amount      Int
   type        String   // CREDIT/DEBIT
   description String?
   reference   String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("transactions")
+}
+
+model CategoryMapping {
+  id          String   @id @default(cuid())
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  siteId      String   @map("site_id")
+  sourceName  String   @map("source_name")   // Shopee category name
+  targetId    String   @map("target_id")     // WooCommerce category ID
+  targetName  String   @map("target_name")   // WooCommerce category name
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([siteId, sourceName])
+  @@map("category_mappings")
 }

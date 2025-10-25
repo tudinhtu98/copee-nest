@@ -74,13 +74,19 @@ let AuthService = class AuthService {
         const ok = await bcrypt.compare(password, user.passwordHash || '');
         if (!ok)
             throw new common_1.UnauthorizedException('Sai thông tin');
-        const token = await this.jwt.signAsync({ sub: user.id, role: user.role, username: user.username });
+        const payload = {
+            sub: user.id,
+            role: user.role,
+            username: user.username,
+        };
+        const token = await this.jwt.signAsync(payload);
         return { access_token: token };
     }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [users_service_1.UsersService, jwt_1.JwtService])
+    __metadata("design:paramtypes", [users_service_1.UsersService,
+        jwt_1.JwtService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

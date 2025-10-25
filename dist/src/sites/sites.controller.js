@@ -16,6 +16,8 @@ exports.SitesController = void 0;
 const common_1 = require("@nestjs/common");
 const sites_service_1 = require("./sites.service");
 const passport_1 = require("@nestjs/passport");
+const roles_decorator_1 = require("../auth/roles.decorator");
+const client_1 = require("@prisma/client");
 let SitesController = class SitesController {
     sites;
     constructor(sites) {
@@ -29,6 +31,15 @@ let SitesController = class SitesController {
     }
     remove(req, id) {
         return this.sites.remove(req.user.userId, id);
+    }
+    getCategoryMappings(req, siteId) {
+        return this.sites.getCategoryMappings(siteId, req.user.userId);
+    }
+    createCategoryMapping(req, siteId, body) {
+        return this.sites.createCategoryMapping(req.user.userId, siteId, body);
+    }
+    deleteCategoryMapping(req, siteId, mappingId) {
+        return this.sites.deleteCategoryMapping(req.user.userId, siteId, mappingId);
     }
 };
 exports.SitesController = SitesController;
@@ -55,8 +66,35 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", void 0)
 ], SitesController.prototype, "remove", null);
+__decorate([
+    (0, common_1.Get)(':siteId/category-mappings'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('siteId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", void 0)
+], SitesController.prototype, "getCategoryMappings", null);
+__decorate([
+    (0, common_1.Post)(':siteId/category-mappings'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('siteId')),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", void 0)
+], SitesController.prototype, "createCategoryMapping", null);
+__decorate([
+    (0, common_1.Delete)(':siteId/category-mappings/:mappingId'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('siteId')),
+    __param(2, (0, common_1.Param)('mappingId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:returntype", void 0)
+], SitesController.prototype, "deleteCategoryMapping", null);
 exports.SitesController = SitesController = __decorate([
     (0, common_1.UseGuards)((0, passport_1.AuthGuard)('jwt')),
+    (0, roles_decorator_1.Roles)(client_1.UserRole.USER),
     (0, common_1.Controller)('sites'),
     __metadata("design:paramtypes", [sites_service_1.SitesService])
 ], SitesController);

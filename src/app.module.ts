@@ -11,7 +11,16 @@ import { AdminModule } from './admin/admin.module';
 import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
-  imports: [ConfigModule.forRoot({ isGlobal: true }), PrismaModule, AuthModule, UsersModule, ProductsModule, SitesModule, BillingModule, AdminModule],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    ProductsModule,
+    SitesModule,
+    BillingModule,
+    AdminModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

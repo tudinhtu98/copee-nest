@@ -1,13 +1,24 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly users: UsersService, private readonly jwt: JwtService) {}
+  constructor(
+    private readonly users: UsersService,
+    private readonly jwt: JwtService,
+  ) {}
 
-  async register(params: { email: string; username: string; password: string }) {
+  async register(params: {
+    email: string;
+    username: string;
+    password: string;
+  }) {
     const { email, username, password } = params;
     const existed = await this.users.findByEmail(email);
     if (existed) throw new BadRequestException('Email đã tồn tại');
@@ -24,9 +35,12 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Sai thông tin');
     const ok = await bcrypt.compare(password, (user as any).passwordHash || '');
     if (!ok) throw new UnauthorizedException('Sai thông tin');
-    const token = await this.jwt.signAsync({ sub: (user as any).id, role: (user as any).role, username: (user as any).username });
+    const payload = {
+      sub: (user as any).id,
+      role: (user as any).role,
+      username: (user as any).username,
+    }
+    const token = await this.jwt.signAsync(payload);
     return { access_token: token };
   }
 }
-
-

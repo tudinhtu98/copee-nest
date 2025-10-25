@@ -14,11 +14,22 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { username } });
   }
 
-  createUser(params: { email: string; username: string; passwordHash: string; role?: UserRole }) {
+  createUser(params: {
+    email: string;
+    username: string;
+    passwordHash: string;
+    role?: UserRole;
+  }) {
     const { email, username, passwordHash, role } = params;
     return this.prisma.user.create({
       data: { email, username, passwordHash, role: role ?? 'USER' },
-      select: { id: true, email: true, username: true, role: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        createdAt: true,
+      },
     });
   }
 }

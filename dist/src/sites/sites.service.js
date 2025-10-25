@@ -23,8 +23,49 @@ let SitesService = class SitesService {
     create(userId, input) {
         return this.prisma.site.create({ data: { userId, ...input } });
     }
-    remove(userId, id) {
-        return this.prisma.site.delete({ where: { id } });
+    async remove(userId, id) {
+        const result = await this.prisma.site.deleteMany({ where: { id, userId } });
+        if (result.count === 0) {
+            throw new common_1.NotFoundException('Site không tồn tại');
+        }
+        return { removed: result.count };
+    }
+    async getCategoryMappings(siteId, userId) {
+        const site = await this.prisma.site.findFirst({ where: { id: siteId, userId } });
+        if (!site) {
+            throw new common_1.NotFoundException('Site không tồn tại');
+        }
+        return this.prisma.categoryMapping.findMany({ where: { siteId } });
+    }
+    async createCategoryMapping(userId, siteId, input) {
+        const site = await this.prisma.site.findFirst({ where: { id: siteId, userId } });
+        if (!site) {
+            throw new common_1.NotFoundException('Site không tồn tại');
+        }
+        try {
+            return await this.prisma.categoryMapping.create({
+                data: { siteId, ...input },
+            });
+        }
+        catch (e) {
+            if (e.code === 'P2002') {
+                throw new common_1.BadRequestException('Category mapping đã tồn tại');
+            }
+            throw e;
+        }
+    }
+    async deleteCategoryMapping(userId, siteId, mappingId) {
+        const site = await this.prisma.site.findFirst({ where: { id: siteId, userId } });
+        if (!site) {
+            throw new common_1.NotFoundException('Site không tồn tại');
+        }
+        const result = await this.prisma.categoryMapping.deleteMany({
+            where: { id: mappingId, siteId },
+        });
+        if (result.count === 0) {
+            throw new common_1.NotFoundException('Mapping không tồn tại');
+        }
+        return { removed: result.count };
     }
 };
 exports.SitesService = SitesService;
