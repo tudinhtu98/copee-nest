@@ -213,6 +213,51 @@ export class ProductsService {
     return this.prisma.product.update({ where: { id: productId }, data: updateData });
   }
 
+  async deleteProduct(userId: string, productId: string) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product || product.userId !== userId) {
+      throw new ForbiddenException('Không tìm thấy sản phẩm');
+    }
+
+    // Delete related upload jobs first
+    await this.prisma.uploadJob.deleteMany({ where: { productId } });
+
+    // Delete the product
+    await this.prisma.product.delete({ where: { id: productId } });
+
+    return { message: 'Đã xóa sản phẩm' };
+  }
+
+  async deleteProducts(userId: string, productIds: string[]) {
+    if (!productIds || productIds.length === 0) {
+      throw new BadRequestException('Danh sách sản phẩm không được để trống');
+    }
+
+    // Verify all products belong to the user
+    const products = await this.prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        userId,
+      },
+    });
+
+    if (products.length !== productIds.length) {
+      throw new ForbiddenException('Một số sản phẩm không tồn tại hoặc không thuộc quyền sở hữu của bạn');
+    }
+
+    // Delete related upload jobs first
+    await this.prisma.uploadJob.deleteMany({
+      where: { productId: { in: productIds } },
+    });
+
+    // Delete the products
+    await this.prisma.product.deleteMany({
+      where: { id: { in: productIds } },
+    });
+
+    return { message: `Đã xóa ${productIds.length} sản phẩm`, deleted: productIds.length };
+  }
+
   async copyProduct(
     userId: string,
     input: {

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Patch, Post, Param, Req, UseGuards, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  Delete,
+  Param,
+  Req,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProductsService } from './products.service';
 import { Roles } from '../auth/roles.decorator';
@@ -50,13 +61,13 @@ export class ProductsController {
     @Req() req: AuthenticatedRequest,
     @Body()
     body: {
-      sourceUrl: string
-      title?: string
-      description?: string
-      images?: string[]
-      price?: number
-      currency?: string
-      category?: string
+      sourceUrl: string;
+      title?: string;
+      description?: string;
+      images?: string[];
+      price?: number;
+      currency?: string;
+      category?: string;
     },
   ) {
     return this.products.copyProduct(req.user.userId, body);
@@ -66,8 +77,27 @@ export class ProductsController {
   update(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
-    @Body() body: { title?: string; description?: string; price?: number; category?: string },
+    @Body()
+    body: {
+      title?: string;
+      description?: string;
+      price?: number;
+      category?: string;
+    },
   ) {
     return this.products.updateProduct(req.user.userId, id, body);
+  }
+
+  @Delete('bulk')
+  deleteBulk(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { productIds: string[] },
+  ) {
+    return this.products.deleteProducts(req.user.userId, body.productIds);
+  }
+
+  @Delete(':id')
+  delete(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.products.deleteProduct(req.user.userId, id);
   }
 }
