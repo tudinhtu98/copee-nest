@@ -45,7 +45,7 @@ export class UploadService {
         name: 'upload-product',
         data: job,
         opts: {
-          attempts: 3,
+          attempts: 3, // BullMQ will retry up to 3 times
           backoff: {
             type: 'exponential',
             delay: 2000,
@@ -55,8 +55,9 @@ export class UploadService {
             count: 1000,
           },
           removeOnFail: {
-            age: 86400,
+            age: 86400, // Keep failed jobs for 24 hours so they can be manually retried
           },
+          // Don't remove failed jobs immediately - allow manual retry
         },
       })),
     );
