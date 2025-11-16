@@ -291,6 +291,40 @@ export class ProductsService {
     const categoryProvided = Object.prototype.hasOwnProperty.call(input, 'category');
     const imagesProvided = Object.prototype.hasOwnProperty.call(input, 'images');
 
+    // Check for category mapping if category is provided
+    let categoryId: string | undefined = undefined;
+    let needsMapping = false;
+    if (category && category.length > 0) {
+      // Find mapping for this category in any of user's sites
+      const userSites = await this.prisma.site.findMany({
+        where: { userId },
+        select: { id: true },
+      });
+      const siteIds = userSites.map((s) => s.id);
+
+      if (siteIds.length > 0) {
+        const mapping = (await this.prisma.categoryMapping.findFirst({
+          where: {
+            siteId: { in: siteIds },
+            sourceName: category,
+          },
+          include: {
+            wooCategory: true,
+          } as any,
+        })) as any;
+
+        if (mapping) {
+          // Use WooCommerce category ID from mapping
+          categoryId = mapping.wooCategory?.wooId || mapping.targetId || undefined;
+          needsMapping = false;
+        } else {
+          needsMapping = true;
+        }
+      } else {
+        needsMapping = true;
+      }
+    }
+
     const existing = await this.prisma.product.findFirst({
       where: { userId, sourceUrl },
     });
@@ -313,6 +347,8 @@ export class ProductsService {
       if (categoryProvided) {
         updateData.category =
           category && category.length > 0 ? category : null;
+        (updateData as any).categoryId = categoryId || null;
+        (updateData as any).needsMapping = needsMapping;
       }
       if (imagesProvided) {
         updateData.images = normalizedImages.length ? normalizedImages : Prisma.JsonNull;
@@ -324,7 +360,7 @@ export class ProductsService {
       });
     }
 
-    const createData: Prisma.ProductUncheckedCreateInput = {
+    const createData: any = {
       userId,
       sourceShop: 'shopee',
       sourceUrl,
@@ -334,6 +370,8 @@ export class ProductsService {
       description: descriptionProvided ? description ?? null : undefined,
       price: priceProvided ? price ?? null : undefined,
       category: categoryProvided ? category ?? null : undefined,
+      categoryId: categoryId || undefined,
+      needsMapping: needsMapping,
       images: normalizedImages.length ? normalizedImages : undefined,
     };
 
@@ -401,27 +439,40 @@ export class ProductsService {
       }
     }
 
-    // Map category using category mapping
+    // Map category with priority: categoryId > targetCategory > mapping > categoryName
     let categoryArray: { id?: string; name?: string }[] | undefined = undefined;
-    if (targetCategory) {
-      // Use target category if provided
+    
+    if (product.categoryId) {
+      // Priority 1: Use categoryId from product (already mapped)
+      categoryArray = [{ id: product.categoryId }];
+    } else if (targetCategory) {
+      // Priority 2: Use target category if provided by user
       categoryArray = [{ name: targetCategory }];
     } else if (product.category) {
-      // Check for category mapping
-      const mapping = await this.prisma.categoryMapping.findUnique({
+      // Priority 3: Check for category mapping
+      const mapping = (await this.prisma.categoryMapping.findUnique({
         where: {
           siteId_sourceName: {
             siteId: site.id,
             sourceName: product.category,
           },
         },
-      });
+        include: {
+          wooCategory: true,
+        } as any,
+      })) as any;
 
       if (mapping) {
-        // Use mapped WooCommerce category ID
-        categoryArray = [{ id: mapping.targetId }];
+        // Use mapped WooCommerce category ID (prioritize wooCategory.wooId)
+        const wooCategoryId = mapping.wooCategory?.wooId || mapping.targetId || undefined;
+        if (wooCategoryId) {
+          categoryArray = [{ id: wooCategoryId }];
+        } else {
+          // Fallback to category name if no ID available
+          categoryArray = [{ name: product.category }];
+        }
       } else {
-        // Fallback to category name
+        // Priority 4: Fallback to category name
         categoryArray = [{ name: product.category }];
       }
     }

@@ -56,7 +56,7 @@ export class SitesController {
   createCategoryMapping(
     @Req() req: AuthenticatedRequest,
     @Param('siteId') siteId: string,
-    @Body() body: { sourceName: string; targetId: string; targetName: string },
+    @Body() body: { sourceName: string; wooCategoryId: string },
   ) {
     return this.sites.createCategoryMapping(req.user.userId, siteId, body);
   }
@@ -68,6 +68,22 @@ export class SitesController {
     @Param('mappingId') mappingId: string,
   ) {
     return this.sites.deleteCategoryMapping(req.user.userId, siteId, mappingId);
+  }
+
+  @Post(':siteId/categories/sync')
+  syncCategories(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    return this.sites.syncWooCommerceCategories(req.user.userId, siteId);
+  }
+
+  @Get(':siteId/categories')
+  getCategories(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    return this.sites.getWooCommerceCategories(siteId, req.user.userId);
   }
 }
 

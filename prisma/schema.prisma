@@ -1,5 +1,3 @@
-// Prisma schema for Copee
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,7 +7,127 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Enums
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  username     String        @unique
+  passwordHash String        @map("password_hash")
+  role         UserRole      @default(USER)
+  balance      Int           @default(0)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  products     Product[]
+  sites        Site[]
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model Site {
+  id                    String                @id @default(cuid())
+  userId                String                @map("user_id")
+  name                  String
+  baseUrl               String                @map("base_url")
+  wooConsumerKey        String                @map("woo_consumer_key")
+  wooConsumerSecret     String                @map("woo_consumer_secret")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+  categoryMappings      CategoryMapping[]
+  user                  User                  @relation(fields: [userId], references: [id])
+  uploads               UploadJob[]
+  wooCommerceCategories WooCommerceCategory[]
+
+  @@map("sites")
+}
+
+model Product {
+  id           String        @id @default(cuid())
+  userId       String        @map("user_id")
+  sourceShop   String        @map("source_shop")
+  sourceUrl    String        @map("source_url")
+  title        String
+  description  String?
+  images       Json?
+  price        Int?
+  currency     String?
+  category     String?
+  status       ProductStatus @default(DRAFT)
+  errorMessage String?       @map("error_message")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  categoryId   String?       @map("category_id")
+  needsMapping Boolean       @default(false) @map("needs_mapping")
+  user         User          @relation(fields: [userId], references: [id])
+  uploads      UploadJob[]
+
+  @@map("products")
+}
+
+model UploadJob {
+  id             String    @id @default(cuid())
+  productId      String    @map("product_id")
+  siteId         String    @map("site_id")
+  targetCategory String?   @map("target_category")
+  payload        Json?
+  result         Json?
+  status         String    @default("PENDING")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastRetryAt    DateTime? @map("last_retry_at")
+  retryCount     Int       @default(0) @map("retry_count")
+  product        Product   @relation(fields: [productId], references: [id])
+  site           Site      @relation(fields: [siteId], references: [id])
+
+  @@map("upload_jobs")
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  amount      Int
+  type        String
+  description String?
+  reference   String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@map("transactions")
+}
+
+model WooCommerceCategory {
+  id               String            @id @default(cuid())
+  siteId           String            @map("site_id")
+  wooId            String            @map("woo_id")
+  name             String
+  slug             String?
+  parentId         String?           @map("parent_id")
+  count            Int               @default(0)
+  syncedAt         DateTime          @default(now()) @map("synced_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  categoryMappings CategoryMapping[]
+  site             Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, wooId])
+  @@map("woocommerce_categories")
+}
+
+model CategoryMapping {
+  id            String               @id @default(cuid())
+  siteId        String               @map("site_id")
+  sourceName    String               @map("source_name") // Shopee category name
+  targetId      String?              @map("target_id") // WooCommerce category ID (auto-populated from wooCategory, kept for backward compatibility)
+  targetName    String?              @map("target_name") // WooCommerce category name (auto-populated from wooCategory, kept for backward compatibility)
+  wooCategoryId String?              @map("woo_category_id") // Required for new mappings
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  site          Site                 @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  wooCategory   WooCommerceCategory? @relation(fields: [wooCategoryId], references: [id], onDelete: SetNull)
+
+  @@unique([siteId, sourceName])
+  @@map("category_mappings")
+}
+
 enum UserRole {
   USER
   MOD
@@ -21,106 +139,4 @@ enum ProductStatus {
   READY
   UPLOADED
   FAILED
-}
-
-// Models
-model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  username     String        @unique
-  passwordHash String        @map("password_hash")
-  role         UserRole      @default(USER)
-  balance      Int           @default(0)
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt      @map("updated_at")
-
-  products     Product[]
-  sites        Site[]
-  transactions Transaction[]
-
-  @@map("users")
-}
-
-model Site {
-  id                String   @id @default(cuid())
-  user              User     @relation(fields: [userId], references: [id])
-  userId            String   @map("user_id")
-  name              String
-  baseUrl           String   @map("base_url")
-  wooConsumerKey    String   @map("woo_consumer_key")
-  wooConsumerSecret String   @map("woo_consumer_secret")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt      @map("updated_at")
-
-  uploads       UploadJob[]
-  categoryMappings CategoryMapping[]
-
-  @@map("sites")
-}
-
-model Product {
-  id           String         @id @default(cuid())
-  user         User           @relation(fields: [userId], references: [id])
-  userId       String         @map("user_id")
-  sourceShop   String         @map("source_shop")
-  sourceUrl    String         @map("source_url")
-  title        String
-  description  String?
-  images       Json?
-  price        Int?
-  currency     String?
-  category     String?
-  status       ProductStatus  @default(DRAFT)
-  errorMessage String?        @map("error_message")
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt      @map("updated_at")
-
-  uploads      UploadJob[]
-
-  @@map("products")
-}
-
-model UploadJob {
-  id             String   @id @default(cuid())
-  product        Product  @relation(fields: [productId], references: [id])
-  productId      String   @map("product_id")
-  site           Site     @relation(fields: [siteId], references: [id])
-  siteId         String   @map("site_id")
-  targetCategory String? @map("target_category")
-  payload        Json?
-  result         Json?
-  status         String   @default("PENDING")
-  retryCount     Int      @default(0) @map("retry_count")
-  lastRetryAt    DateTime? @map("last_retry_at")
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt      @map("updated_at")
-
-  @@map("upload_jobs")
-}
-
-model Transaction {
-  id          String   @id @default(cuid())
-  user        User     @relation(fields: [userId], references: [id])
-  userId      String   @map("user_id")
-  amount      Int
-  type        String   // CREDIT/DEBIT
-  description String?
-  reference   String?
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  @@map("transactions")
-}
-
-model CategoryMapping {
-  id          String   @id @default(cuid())
-  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  siteId      String   @map("site_id")
-  sourceName  String   @map("source_name")   // Shopee category name
-  targetId    String   @map("target_id")     // WooCommerce category ID
-  targetName  String   @map("target_name")   // WooCommerce category name
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  @@unique([siteId, sourceName])
-  @@map("category_mappings")
 }
