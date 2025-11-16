@@ -101,26 +101,126 @@ export class ProductsService {
     return { queued: products.length };
   }
 
-  async processPendingUploads(userId: string) {
-    const jobs = await this.prisma.uploadJob.findMany({
-      where: {
-        status: { in: ['PENDING', 'FAILED'] },
-        retryCount: { lt: 3 },
-        product: { userId },
-        site: { userId },
+  async listUploadJobs(
+    userId: string,
+    options?: {
+      page?: number
+      limit?: number
+      status?: string
+      siteId?: string
+      sortBy?: string
+      sortOrder?: 'asc' | 'desc'
+    },
+  ) {
+    const page = options?.page || 1
+    const limit = options?.limit || 20
+    const skip = (page - 1) * limit
+
+    const where: any = {
+      product: { userId },
+      site: { userId },
+    }
+
+    if (options?.status) {
+      where.status = options.status
+    }
+
+    if (options?.siteId) {
+      where.siteId = options.siteId
+    }
+
+    const orderBy: any = {}
+    orderBy[options?.sortBy || 'createdAt'] = options?.sortOrder || 'desc'
+
+    const [items, total] = await Promise.all([
+      this.prisma.uploadJob.findMany({
+        where,
+        include: { 
+          product: true, 
+          site: true,
+        },
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      this.prisma.uploadJob.count({ where }),
+    ])
+    
+    // Fetch WooCommerce categories to map targetCategory IDs to names
+    const siteIds = [...new Set(items.map((job: any) => job.siteId))];
+    const categoriesMap = new Map<string, Map<string, string>>(); // siteId -> (categoryId -> categoryName)
+    
+    for (const siteId of siteIds) {
+      const siteCategories = await this.prisma.wooCommerceCategory.findMany({
+        where: { siteId },
+        select: { wooId: true, name: true },
+      });
+      const categoryMap = new Map<string, string>();
+      siteCategories.forEach((cat: any) => {
+        categoryMap.set(String(cat.wooId), cat.name);
+      });
+      categoriesMap.set(siteId, categoryMap);
+    }
+    
+    // Map category names to jobs
+    const itemsWithCategoryNames = items.map((job: any) => {
+      const categoryMap = categoriesMap.get(job.siteId);
+      const categoryName = job.targetCategory && categoryMap 
+        ? categoryMap.get(String(job.targetCategory)) || job.targetCategory
+        : job.targetCategory;
+      return {
+        ...job,
+        targetCategoryName: categoryName,
+      };
+    });
+
+    return {
+      items: itemsWithCategoryNames,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
+    }
+  }
+
+  async processPendingUploads(userId: string, jobIds?: string[]) {
+    const where: any = {
+      status: { in: ['PENDING', 'FAILED'] },
+      retryCount: { lt: 3 },
+      product: { userId },
+      site: { userId },
+    }
+    
+    // Exclude CANCELLED jobs - Prisma doesn't support NOT with status in, so we filter after
+    // Actually, since we're using status: { in: ['PENDING', 'FAILED'] }, CANCELLED is already excluded
+
+    if (jobIds && jobIds.length > 0) {
+      where.id = { in: jobIds }
+    }
+
+    const jobs = await this.prisma.uploadJob.findMany({
+      where,
       include: { product: true, site: true },
-      take: 10,
+      take: jobIds && jobIds.length > 0 ? jobIds.length : 10,
     });
     if (jobs.length === 0) return { processed: 0 };
 
     let success = 0;
     for (const job of jobs) {
       try {
+        console.log(`Processing upload job ${job.id} for product ${job.product.title}`);
         const wcRes = await this.uploadToWoo(job.site, job.product, job.targetCategory || undefined);
+        
+        // Double-check that product was created
+        if (!wcRes || !wcRes.id) {
+          throw new Error(`Upload appeared successful but no WooCommerce product ID returned. Response: ${JSON.stringify(wcRes).substring(0, 200)}`);
+        }
+        
         await this.prisma.uploadJob.update({
           where: { id: job.id },
-          data: { status: 'SUCCESS', result: wcRes },
+          data: { status: 'SUCCESS', result: { productId: wcRes.id, ...wcRes } },
         });
         await this.prisma.product.update({
           where: { id: job.productId },
@@ -131,8 +231,10 @@ export class ProductsService {
           1000,
           `UPLOAD:${job.productId}`,
         );
+        console.log(`Successfully processed upload job ${job.id}, WooCommerce product ID: ${wcRes.id}`);
         success++;
       } catch (e: any) {
+        console.error(`Error processing upload job ${job.id}:`, e.message, e.stack);
         const retryCount = job.retryCount + 1;
         const shouldRetry = retryCount < 3;
 
@@ -160,6 +262,31 @@ export class ProductsService {
       }
     }
     return { processed: jobs.length, success };
+  }
+
+  async cancelUploadJobs(userId: string, jobIds?: string[]) {
+    const where: any = {
+      product: { userId },
+      site: { userId },
+    };
+
+    if (jobIds && jobIds.length > 0) {
+      // If specific jobs selected, can cancel any status except SUCCESS
+      where.id = { in: jobIds };
+      where.status = { not: 'SUCCESS' };
+    } else {
+      // If no jobs selected, only cancel FAILED jobs
+      where.status = 'FAILED';
+    }
+
+    const result = await this.prisma.uploadJob.updateMany({
+      where,
+      data: {
+        status: 'CANCELLED',
+      },
+    });
+
+    return { cancelled: result.count };
   }
 
   async updateProduct(
@@ -446,8 +573,10 @@ export class ProductsService {
       // Priority 1: Use categoryId from product (already mapped)
       categoryArray = [{ id: product.categoryId }];
     } else if (targetCategory) {
-      // Priority 2: Use target category if provided by user
-      categoryArray = [{ name: targetCategory }];
+      // Priority 2: Use target category ID (always ID, never name)
+      const categoryId = String(targetCategory);
+      categoryArray = [{ id: categoryId }];
+      console.log(`Using category ID from targetCategory: ${categoryId}`);
     } else if (product.category) {
       // Priority 3: Check for category mapping
       const mapping = (await this.prisma.categoryMapping.findUnique({
@@ -481,12 +610,17 @@ export class ProductsService {
       name: product.title || 'Copied product',
       type: 'simple',
       regular_price: product.price ? String(product.price) : undefined,
-      description:
-        (product.description || '') +
-        (product.sourceUrl ? `\n\nSource: ${product.sourceUrl}` : ''),
+      description: product.description || undefined,
       categories: categoryArray,
       images: uploadedImages.length > 0 ? uploadedImages : undefined,
     };
+    
+    console.log('Uploading product to WooCommerce with category:', {
+      categoryArray,
+      targetCategory,
+      productCategory: product.category,
+      productCategoryId: product.categoryId,
+    });
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -496,10 +630,38 @@ export class ProductsService {
       },
       body: JSON.stringify(body),
     });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Woo API error: ${res.status} ${text}`);
+    
+    const responseText = await res.text();
+    let responseData: any;
+    
+    try {
+      responseData = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`WooCommerce API returned invalid JSON: ${responseText.substring(0, 200)}`);
     }
-    return await res.json();
+    
+    if (!res.ok) {
+      const errorMessage = responseData?.message || responseData?.code || responseText;
+      throw new Error(`WooCommerce API error (${res.status}): ${errorMessage}`);
+    }
+    
+    // Validate that product was actually created
+    if (!responseData || !responseData.id) {
+      console.error('WooCommerce response missing product ID:', {
+        status: res.status,
+        response: responseData,
+        endpoint,
+        productTitle: product.title,
+      });
+      throw new Error(`WooCommerce API returned success but no product ID. Response: ${JSON.stringify(responseData).substring(0, 200)}`);
+    }
+    
+    console.log(`Successfully uploaded product to WooCommerce:`, {
+      productId: responseData.id,
+      productTitle: product.title,
+      siteUrl: site.baseUrl,
+    });
+    
+    return responseData;
   }
 }

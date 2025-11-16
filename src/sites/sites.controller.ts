@@ -85,6 +85,15 @@ export class SitesController {
   ) {
     return this.sites.getWooCommerceCategories(siteId, req.user.userId);
   }
+
+  @Post(':siteId/categories')
+  createCategory(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+    @Body() body: { name: string; parentId?: string },
+  ) {
+    return this.sites.createWooCommerceCategory(req.user.userId, siteId, body);
+  }
 }
 
 

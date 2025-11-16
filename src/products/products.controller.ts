@@ -51,9 +51,40 @@ export class ProductsController {
     return this.products.createUploadJob(req.user.userId, body);
   }
 
+  @Get('upload-jobs')
+  listUploadJobs(
+    @Req() req: AuthenticatedRequest,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('siteId') siteId?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: string,
+  ) {
+    return this.products.listUploadJobs(req.user.userId, {
+      page: page ? parseInt(page) : 1,
+      limit: limit ? parseInt(limit) : 20,
+      status: status || undefined,
+      siteId: siteId || undefined,
+      sortBy: (sortBy as any) || 'createdAt',
+      sortOrder: (sortOrder as 'asc' | 'desc') || 'desc',
+    });
+  }
+
   @Post('process-uploads')
-  process(@Req() req: AuthenticatedRequest) {
-    return this.products.processPendingUploads(req.user.userId);
+  process(
+    @Req() req: AuthenticatedRequest,
+    @Body() body?: { jobIds?: string[] },
+  ) {
+    return this.products.processPendingUploads(req.user.userId, body?.jobIds);
+  }
+
+  @Post('cancel-jobs')
+  cancel(
+    @Req() req: AuthenticatedRequest,
+    @Body() body?: { jobIds?: string[] },
+  ) {
+    return this.products.cancelUploadJobs(req.user.userId, body?.jobIds);
   }
 
   @Post('copy')

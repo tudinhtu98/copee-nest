@@ -211,6 +211,92 @@ export class SitesService {
       orderBy: { name: 'asc' },
     });
   }
+
+  async createWooCommerceCategory(
+    userId: string,
+    siteId: string,
+    body: { name: string; parentId?: string },
+  ) {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, userId },
+    });
+    if (!site) {
+      throw new NotFoundException('Site không tồn tại');
+    }
+
+    if (!site.wooConsumerKey || !site.wooConsumerSecret || !site.baseUrl) {
+      throw new BadRequestException('Site chưa cấu hình WooCommerce API');
+    }
+
+    try {
+      const auth = Buffer.from(
+        `${site.wooConsumerKey}:${site.wooConsumerSecret}`,
+      ).toString('base64');
+
+      const endpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wc/v3/products/categories`;
+
+      const payload: any = {
+        name: body.name,
+      };
+
+      if (body.parentId) {
+        payload.parent = parseInt(body.parentId);
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new BadRequestException(
+          `Không thể tạo category trong WooCommerce: ${errorText}`,
+        );
+      }
+
+      const category = await response.json();
+
+      // Save to database
+      const synced = await this.prisma.wooCommerceCategory.upsert({
+        where: {
+          siteId_wooId: {
+            siteId: site.id,
+            wooId: String(category.id),
+          },
+        },
+        update: {
+          name: category.name,
+          slug: category.slug || null,
+          parentId: category.parent ? String(category.parent) : null,
+          count: category.count || 0,
+          syncedAt: new Date(),
+        },
+        create: {
+          siteId: site.id,
+          wooId: String(category.id),
+          name: category.name,
+          slug: category.slug || null,
+          parentId: category.parent ? String(category.parent) : null,
+          count: category.count || 0,
+          syncedAt: new Date(),
+        },
+      });
+
+      return synced;
+    } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Lỗi khi tạo category: ${error.message}`,
+      );
+    }
+  }
 }
 
 
