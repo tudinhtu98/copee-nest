@@ -6,12 +6,14 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
+import { UploadService } from '../upload/upload.service';
 
 @Injectable()
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
+    private readonly uploadService: UploadService,
   ) {}
 
   async list(
@@ -193,9 +195,7 @@ export class ProductsService {
       site: { userId },
     }
     
-    // Exclude CANCELLED jobs - Prisma doesn't support NOT with status in, so we filter after
-    // Actually, since we're using status: { in: ['PENDING', 'FAILED'] }, CANCELLED is already excluded
-
+    // Exclude CANCELLED jobs
     if (jobIds && jobIds.length > 0) {
       where.id = { in: jobIds }
     }
@@ -203,65 +203,26 @@ export class ProductsService {
     const jobs = await this.prisma.uploadJob.findMany({
       where,
       include: { product: true, site: true },
-      take: jobIds && jobIds.length > 0 ? jobIds.length : 10,
+      take: jobIds && jobIds.length > 0 ? jobIds.length : 100, // Increased limit for queue processing
     });
-    if (jobs.length === 0) return { processed: 0 };
+    
+    if (jobs.length === 0) return { processed: 0, queued: 0 };
 
-    let success = 0;
-    for (const job of jobs) {
-      try {
-        console.log(`Processing upload job ${job.id} for product ${job.product.title}`);
-        const wcRes = await this.uploadToWoo(job.site, job.product, job.targetCategory || undefined);
-        
-        // Double-check that product was created
-        if (!wcRes || !wcRes.id) {
-          throw new Error(`Upload appeared successful but no WooCommerce product ID returned. Response: ${JSON.stringify(wcRes).substring(0, 200)}`);
-        }
-        
-        await this.prisma.uploadJob.update({
-          where: { id: job.id },
-          data: { status: 'SUCCESS', result: { productId: wcRes.id, ...wcRes } },
-        });
-        await this.prisma.product.update({
-          where: { id: job.productId },
-          data: { status: 'UPLOADED', errorMessage: null },
-        });
-        await this.billing.debit(
-          job.product.userId,
-          1000,
-          `UPLOAD:${job.productId}`,
-        );
-        console.log(`Successfully processed upload job ${job.id}, WooCommerce product ID: ${wcRes.id}`);
-        success++;
-      } catch (e: any) {
-        console.error(`Error processing upload job ${job.id}:`, e.message, e.stack);
-        const retryCount = job.retryCount + 1;
-        const shouldRetry = retryCount < 3;
+    // Add jobs to queue for parallel processing
+    const queueJobs = jobs.map((job) => ({
+      jobId: job.id,
+      productId: job.productId,
+      siteId: job.siteId,
+      targetCategory: job.targetCategory || undefined,
+      userId: job.product.userId,
+    }));
 
-        await this.prisma.uploadJob.update({
-          where: { id: job.id },
-          data: {
-            status: shouldRetry ? 'PENDING' : 'FAILED',
-            result: { error: e.message },
-            retryCount,
-            lastRetryAt: new Date(),
-          },
-        });
+    // Add all jobs to queue (status will be updated to PROCESSING by the processor)
+    await this.uploadService.addBulkUploadJobs(queueJobs);
 
-        await this.prisma.product.update({
-          where: { id: job.productId },
-          data: {
-            status: shouldRetry ? 'DRAFT' : 'FAILED',
-            errorMessage: e.message,
-          },
-        });
+    console.log(`[Queue] Added ${jobs.length} upload jobs to queue for parallel processing`);
 
-        if (!shouldRetry) {
-          console.warn(`Upload job ${job.id} failed after ${retryCount} attempts`);
-        }
-      }
-    }
-    return { processed: jobs.length, success };
+    return { processed: jobs.length, queued: jobs.length };
   }
 
   async cancelUploadJobs(userId: string, jobIds?: string[]) {
