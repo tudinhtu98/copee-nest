@@ -85,6 +85,14 @@ export class SitesController {
   ) {
     return this.sites.createWooCommerceCategory(req.user.userId, siteId, body);
   }
+
+  @Post(':siteId/test-connection')
+  testConnection(
+    @Req() req: AuthenticatedRequest,
+    @Param('siteId') siteId: string,
+  ) {
+    return this.sites.testConnection(req.user.userId, siteId);
+  }
 }
 
 

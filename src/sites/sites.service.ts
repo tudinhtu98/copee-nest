@@ -262,6 +262,114 @@ export class SitesService {
       );
     }
   }
+
+  async testConnection(userId: string, siteId: string) {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, userId },
+      select: {
+        id: true,
+        baseUrl: true,
+        wooConsumerKey: true,
+        wooConsumerSecret: true,
+        wpUsername: true,
+        wpApplicationPassword: true,
+      },
+    });
+    if (!site) {
+      throw new NotFoundException('Site không tồn tại');
+    }
+
+    if (!site.baseUrl) {
+      throw new BadRequestException('Site chưa cấu hình base URL');
+    }
+
+    const results: {
+      wooCommerce?: { success: boolean; message: string };
+      wordPress?: { success: boolean; message: string };
+    } = {};
+
+    // Test WooCommerce API connection
+    if (site.wooConsumerKey && site.wooConsumerSecret) {
+      try {
+        const auth = Buffer.from(
+          `${site.wooConsumerKey}:${site.wooConsumerSecret}`,
+        ).toString('base64');
+        const endpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wc/v3/system_status`;
+        
+        const response = await fetch(endpoint, {
+          headers: {
+            Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          results.wooCommerce = {
+            success: true,
+            message: 'Kết nối WooCommerce API thành công',
+          };
+        } else {
+          const errorText = await response.text();
+          results.wooCommerce = {
+            success: false,
+            message: `WooCommerce API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+          };
+        }
+      } catch (error: any) {
+        results.wooCommerce = {
+          success: false,
+          message: `Lỗi kết nối WooCommerce: ${error.message}`,
+        };
+      }
+    } else {
+      results.wooCommerce = {
+        success: false,
+        message: 'Chưa cấu hình WooCommerce API keys',
+      };
+    }
+
+    // Test WordPress Application Password connection
+    if (site.wpUsername && site.wpApplicationPassword) {
+      try {
+        const auth = Buffer.from(
+          `${site.wpUsername}:${site.wpApplicationPassword}`,
+        ).toString('base64');
+        const endpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/users/me`;
+        
+        const response = await fetch(endpoint, {
+          headers: {
+            Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (response.ok) {
+          results.wordPress = {
+            success: true,
+            message: 'Kết nối WordPress Application Password thành công',
+          };
+        } else {
+          const errorText = await response.text();
+          results.wordPress = {
+            success: false,
+            message: `WordPress API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+          };
+        }
+      } catch (error: any) {
+        results.wordPress = {
+          success: false,
+          message: `Lỗi kết nối WordPress: ${error.message}`,
+        };
+      }
+    } else {
+      results.wordPress = {
+        success: false,
+        message: 'Chưa cấu hình WordPress Application Password',
+      };
+    }
+
+    return results;
+  }
 }
 
 
