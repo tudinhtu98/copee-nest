@@ -96,7 +96,8 @@ export class ProductsController {
       title?: string;
       description?: string;
       images?: string[];
-      price?: number;
+      price?: number; // Sale price (giá đã giảm)
+      originalPrice?: number; // Regular price (giá gốc)
       currency?: string;
       category?: string;
     },

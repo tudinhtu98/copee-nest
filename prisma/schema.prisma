@@ -41,24 +41,25 @@ model Site {
 }
 
 model Product {
-  id           String        @id @default(cuid())
-  userId       String        @map("user_id")
-  sourceShop   String        @map("source_shop")
-  sourceUrl    String        @map("source_url")
-  title        String
-  description  String?
-  images       Json?
-  price        Int?
-  currency     String?
-  category     String?
-  status       ProductStatus @default(DRAFT)
-  errorMessage String?       @map("error_message")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
-  categoryId   String?       @map("category_id")
-  needsMapping Boolean       @default(false) @map("needs_mapping")
-  user         User          @relation(fields: [userId], references: [id])
-  uploads      UploadJob[]
+  id            String        @id @default(cuid())
+  userId        String        @map("user_id")
+  sourceShop    String        @map("source_shop")
+  sourceUrl     String        @map("source_url")
+  title         String
+  description   String?
+  images        Json?
+  price         Int?          // Sale price (giá đã giảm)
+  originalPrice Int?          @map("original_price") // Regular price (giá gốc)
+  currency      String?
+  category      String?
+  status        ProductStatus @default(DRAFT)
+  errorMessage  String?       @map("error_message")
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  categoryId    String?       @map("category_id")
+  needsMapping  Boolean       @default(false) @map("needs_mapping")
+  user          User          @relation(fields: [userId], references: [id])
+  uploads       UploadJob[]
 
   @@map("products")
 }

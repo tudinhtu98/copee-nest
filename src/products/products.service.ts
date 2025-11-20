@@ -369,7 +369,8 @@ export class ProductsService {
       title?: string
       description?: string | null
       images?: string[] | null
-      price?: number | null
+      price?: number | null // Sale price (giá đã giảm)
+      originalPrice?: number | null // Regular price (giá gốc)
       currency?: string | null
       category?: string | null
     },
@@ -387,10 +388,12 @@ export class ProductsService {
     const description = typeof input.description === 'string' ? input.description.trim() : undefined;
     const currency = typeof input.currency === 'string' ? input.currency.trim() : undefined;
     const category = typeof input.category === 'string' ? input.category.trim() : undefined;
-    const price = typeof input.price === 'number' ? Math.round(input.price) : undefined;
+    const price = typeof input.price === 'number' ? Math.round(input.price) : undefined; // Sale price (giá đã giảm)
+    const originalPrice = typeof input.originalPrice === 'number' ? Math.round(input.originalPrice) : undefined; // Regular price (giá gốc)
 
     const descriptionProvided = Object.prototype.hasOwnProperty.call(input, 'description');
     const priceProvided = Object.prototype.hasOwnProperty.call(input, 'price');
+    const originalPriceProvided = Object.prototype.hasOwnProperty.call(input, 'originalPrice');
     const currencyProvided = Object.prototype.hasOwnProperty.call(input, 'currency');
     const categoryProvided = Object.prototype.hasOwnProperty.call(input, 'category');
     const imagesProvided = Object.prototype.hasOwnProperty.call(input, 'images');
@@ -445,6 +448,9 @@ export class ProductsService {
       if (priceProvided) {
         updateData.price = price ?? null;
       }
+      if (originalPriceProvided) {
+        (updateData as any).originalPrice = originalPrice ?? null;
+      }
       if (currencyProvided) {
         updateData.currency = currency && currency.length > 0 ? currency : 'VND';
       }
@@ -473,6 +479,7 @@ export class ProductsService {
       currency: currency && currency.length > 0 ? currency : 'VND',
       description: descriptionProvided ? description ?? null : undefined,
       price: priceProvided ? price ?? null : undefined,
+      originalPrice: originalPriceProvided ? originalPrice ?? null : undefined,
       category: categoryProvided ? category ?? null : undefined,
       categoryId: categoryId || undefined,
       needsMapping: needsMapping,

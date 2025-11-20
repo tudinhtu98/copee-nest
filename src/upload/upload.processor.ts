@@ -231,10 +231,32 @@ export class UploadProcessor extends WorkerHost {
       console.log(`[Queue][Upload] Images ready for product: ${uploadedImages.length} images`);
     }
 
+    // WooCommerce pricing:
+    // - regular_price: Giá gốc (originalPrice) hoặc giá hiện tại nếu không có originalPrice
+    // - sale_price: Giá đã giảm (price) - chỉ set nếu có originalPrice và price < originalPrice
+    let regularPrice: string | undefined = undefined;
+    let salePrice: string | undefined = undefined;
+    
+    if (product.originalPrice) {
+      // Có giá gốc: dùng làm regular_price
+      regularPrice = String(product.originalPrice);
+      // Nếu có giá đã giảm và nhỏ hơn giá gốc, dùng làm sale_price
+      if (product.price && product.price < product.originalPrice) {
+        salePrice = String(product.price);
+      } else if (product.price) {
+        // Nếu price >= originalPrice, dùng price làm regular_price
+        regularPrice = String(product.price);
+      }
+    } else if (product.price) {
+      // Không có giá gốc: dùng price làm regular_price
+      regularPrice = String(product.price);
+    }
+    
     const body = {
       name: product.title || 'Copied product',
       type: 'simple',
-      regular_price: product.price ? String(product.price) : undefined,
+      regular_price: regularPrice,
+      sale_price: salePrice,
       description: product.description || undefined,
       categories: categoryArray,
       images: uploadedImages.length > 0 ? uploadedImages : undefined,
@@ -246,6 +268,10 @@ export class UploadProcessor extends WorkerHost {
       targetCategory,
       productCategory: product.category,
       productCategoryId: product.categoryId,
+      regularPrice,
+      salePrice,
+      originalPrice: product.originalPrice,
+      currentPrice: product.price,
       imagesCount: uploadedImages.length,
       totalImagesAttempted: Array.isArray(product.images) ? product.images.length : 0,
       images: uploadedImages.length > 0 ? uploadedImages.map(img => img.src) : 'NO IMAGES',
