@@ -37,6 +37,7 @@ export class SitesController {
       wooConsumerSecret: string;
       wpUsername?: string;
       wpApplicationPassword?: string;
+      shopeeAffiliateId?: string;
     },
   ) {
     return this.sites.create(req.user.userId, body);
@@ -50,6 +51,7 @@ export class SitesController {
     body: {
       wpUsername?: string;
       wpApplicationPassword?: string;
+      shopeeAffiliateId?: string;
     },
   ) {
     return this.sites.update(req.user.userId, id, body);

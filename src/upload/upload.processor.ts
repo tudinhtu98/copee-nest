@@ -224,8 +224,24 @@ export class UploadProcessor extends WorkerHost {
     };
     
     // Add external URL and button text for Shopee link
+    // Convert to affiliate link if affiliate ID is configured
     if (product.sourceUrl) {
-      body.external_url = product.sourceUrl;
+      let externalUrl = product.sourceUrl;
+      
+      // Convert to Shopee affiliate link if affiliate ID is set
+      if (site.shopeeAffiliateId && site.shopeeAffiliateId.trim()) {
+        try {
+          const url = new URL(externalUrl);
+          // Add or update aff_id parameter
+          url.searchParams.set('aff_id', site.shopeeAffiliateId.trim());
+          externalUrl = url.toString();
+          console.log(`[Queue] Converted to affiliate link: ${externalUrl}`);
+        } catch (error) {
+          console.warn(`[Queue] Failed to convert to affiliate link, using original: ${error}`);
+        }
+      }
+      
+      body.external_url = externalUrl;
       body.button_text = 'Mua ngay';
     }
     

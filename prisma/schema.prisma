@@ -32,6 +32,7 @@ model Site {
   wooConsumerSecret     String                @map("woo_consumer_secret")
   wpUsername            String?               @map("wp_username") // WordPress username for Application Password
   wpApplicationPassword String?               @map("wp_application_password") // WordPress Application Password (encrypted)
+  shopeeAffiliateId     String?               @map("shopee_affiliate_id") // Shopee Affiliate ID for converting product links
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
   user                  User                  @relation(fields: [userId], references: [id])
