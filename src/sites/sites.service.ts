@@ -39,9 +39,16 @@ export class SitesService {
     if (!site) {
       throw new NotFoundException('Site không tồn tại');
     }
+    const updateData: any = {};
+    if (input.wpUsername !== undefined) {
+      updateData.wpUsername = input.wpUsername || null;
+    }
+    if (input.wpApplicationPassword !== undefined) {
+      updateData.wpApplicationPassword = input.wpApplicationPassword || null;
+    }
     return this.prisma.site.update({
       where: { id },
-      data: input,
+      data: updateData,
     });
   }
 
@@ -53,68 +60,6 @@ export class SitesService {
     return { removed: result.count };
   }
 
-  async getCategoryMappings(siteId: string, userId: string) {
-    const site = await this.prisma.site.findFirst({ where: { id: siteId, userId } });
-    if (!site) {
-      throw new NotFoundException('Site không tồn tại');
-    }
-    return this.prisma.categoryMapping.findMany({ where: { siteId } });
-  }
-
-  async createCategoryMapping(
-    userId: string,
-    siteId: string,
-    input: { sourceName: string; wooCategoryId: string },
-  ) {
-    const site = await this.prisma.site.findFirst({ where: { id: siteId, userId } });
-    if (!site) {
-      throw new NotFoundException('Site không tồn tại');
-    }
-
-    // Get WooCommerce category to auto-populate targetId and targetName
-    const wooCategory = await this.prisma.wooCommerceCategory.findFirst({
-      where: { id: input.wooCategoryId, siteId },
-    });
-
-    if (!wooCategory) {
-      throw new NotFoundException('WooCommerce category không tồn tại');
-    }
-
-    try {
-      return await this.prisma.categoryMapping.create({
-        data: {
-          siteId,
-          sourceName: input.sourceName,
-          wooCategoryId: input.wooCategoryId,
-          // Auto-populate from WooCommerceCategory
-          targetId: wooCategory.wooId,
-          targetName: wooCategory.name,
-        },
-      });
-    } catch (e: any) {
-      if (e.code === 'P2002') {
-        throw new BadRequestException('Category mapping đã tồn tại');
-      }
-      throw e;
-    }
-  }
-
-  async deleteCategoryMapping(userId: string, siteId: string, mappingId: string) {
-    const site = await this.prisma.site.findFirst({ where: { id: siteId, userId } });
-    if (!site) {
-      throw new NotFoundException('Site không tồn tại');
-    }
-
-    const result = await this.prisma.categoryMapping.deleteMany({
-      where: { id: mappingId, siteId },
-    });
-
-    if (result.count === 0) {
-      throw new NotFoundException('Mapping không tồn tại');
-    }
-
-    return { removed: result.count };
-  }
 
   async syncWooCommerceCategories(userId: string, siteId: string) {
     const site = await this.prisma.site.findFirst({

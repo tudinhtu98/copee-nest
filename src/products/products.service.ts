@@ -398,38 +398,12 @@ export class ProductsService {
     const categoryProvided = Object.prototype.hasOwnProperty.call(input, 'category');
     const imagesProvided = Object.prototype.hasOwnProperty.call(input, 'images');
 
-    // Check for category mapping if category is provided
+    // Category mapping is no longer used - user selects category directly in upload dialog
     let categoryId: string | undefined = undefined;
     let needsMapping = false;
     if (category && category.length > 0) {
-      // Find mapping for this category in any of user's sites
-      const userSites = await this.prisma.site.findMany({
-        where: { userId },
-        select: { id: true },
-      });
-      const siteIds = userSites.map((s) => s.id);
-
-      if (siteIds.length > 0) {
-        const mapping = (await this.prisma.categoryMapping.findFirst({
-          where: {
-            siteId: { in: siteIds },
-            sourceName: category,
-          },
-          include: {
-            wooCategory: true,
-          } as any,
-        })) as any;
-
-        if (mapping) {
-          // Use WooCommerce category ID from mapping
-          categoryId = mapping.wooCategory?.wooId || mapping.targetId || undefined;
-          needsMapping = false;
-        } else {
-          needsMapping = true;
-        }
-      } else {
-        needsMapping = true;
-      }
+      // Category will be selected manually during upload
+      needsMapping = true;
     }
 
     const existing = await this.prisma.product.findFirst({
@@ -681,32 +655,8 @@ export class ProductsService {
       categoryArray = [{ id: categoryId }];
       console.log(`Using category ID from targetCategory: ${categoryId}`);
     } else if (product.category) {
-      // Priority 3: Check for category mapping
-      const mapping = (await this.prisma.categoryMapping.findUnique({
-        where: {
-          siteId_sourceName: {
-            siteId: site.id,
-            sourceName: product.category,
-          },
-        },
-        include: {
-          wooCategory: true,
-        } as any,
-      })) as any;
-
-      if (mapping) {
-        // Use mapped WooCommerce category ID (prioritize wooCategory.wooId)
-        const wooCategoryId = mapping.wooCategory?.wooId || mapping.targetId || undefined;
-        if (wooCategoryId) {
-          categoryArray = [{ id: wooCategoryId }];
-        } else {
-          // Fallback to category name if no ID available
-          categoryArray = [{ name: product.category }];
-        }
-      } else {
-        // Priority 4: Fallback to category name
-        categoryArray = [{ name: product.category }];
-      }
+      // Fallback to category name
+      categoryArray = [{ name: product.category }];
     }
 
     // Log warning if no images available

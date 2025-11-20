@@ -172,7 +172,7 @@ export class UploadProcessor extends WorkerHost {
       console.log(`[Queue][Upload] 📊 Images: ${uploadedImages.length}/${product.images.length} uploaded successfully`);
     }
 
-    // Map category with priority: categoryId > targetCategory > mapping > categoryName
+    // Map category with priority: categoryId > targetCategory > categoryName
     let categoryArray: { id?: string; name?: string }[] | undefined = undefined;
     
     if (product.categoryId) {
@@ -183,30 +183,8 @@ export class UploadProcessor extends WorkerHost {
       const categoryId = String(targetCategory);
       categoryArray = [{ id: categoryId }];
     } else if (product.category) {
-      // Priority 3: Check for category mapping
-      const mapping = (await this.prisma.categoryMapping.findFirst({
-        where: {
-          siteId: site.id,
-          sourceName: product.category,
-        },
-        include: {
-          wooCategory: true,
-        } as any,
-      })) as any;
-
-      if (mapping) {
-        // Use mapped WooCommerce category ID (prioritize wooCategory.wooId)
-        const wooCategoryId = mapping.wooCategory?.wooId || mapping.targetId || undefined;
-        if (wooCategoryId) {
-          categoryArray = [{ id: wooCategoryId }];
-        } else {
-          // Fallback to category name if no ID available
-          categoryArray = [{ name: product.category }];
-        }
-      } else {
-        // Priority 4: Fallback to category name
-        categoryArray = [{ name: product.category }];
-      }
+      // Priority 3: Fallback to category name
+      categoryArray = [{ name: product.category }];
     }
 
     // Log warning if no images available

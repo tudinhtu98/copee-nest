@@ -60,31 +60,6 @@ export class SitesController {
     return this.sites.remove(req.user.userId, id);
   }
 
-  @Get(':siteId/category-mappings')
-  getCategoryMappings(
-    @Req() req: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-  ) {
-    return this.sites.getCategoryMappings(siteId, req.user.userId);
-  }
-
-  @Post(':siteId/category-mappings')
-  createCategoryMapping(
-    @Req() req: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-    @Body() body: { sourceName: string; wooCategoryId: string },
-  ) {
-    return this.sites.createCategoryMapping(req.user.userId, siteId, body);
-  }
-
-  @Delete(':siteId/category-mappings/:mappingId')
-  deleteCategoryMapping(
-    @Req() req: AuthenticatedRequest,
-    @Param('siteId') siteId: string,
-    @Param('mappingId') mappingId: string,
-  ) {
-    return this.sites.deleteCategoryMapping(req.user.userId, siteId, mappingId);
-  }
 
   @Post(':siteId/categories/sync')
   syncCategories(

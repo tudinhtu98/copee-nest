@@ -34,7 +34,6 @@ model Site {
   wpApplicationPassword String?               @map("wp_application_password") // WordPress Application Password (encrypted)
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
-  categoryMappings      CategoryMapping[]
   user                  User                  @relation(fields: [userId], references: [id])
   uploads               UploadJob[]
   wooCommerceCategories WooCommerceCategory[]
@@ -108,28 +107,12 @@ model WooCommerceCategory {
   syncedAt         DateTime          @default(now()) @map("synced_at")
   createdAt        DateTime          @default(now()) @map("created_at")
   updatedAt        DateTime          @updatedAt @map("updated_at")
-  categoryMappings CategoryMapping[]
   site             Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, wooId])
   @@map("woocommerce_categories")
 }
 
-model CategoryMapping {
-  id            String               @id @default(cuid())
-  siteId        String               @map("site_id")
-  sourceName    String               @map("source_name") // Shopee category name
-  targetId      String?              @map("target_id") // WooCommerce category ID (auto-populated from wooCategory, kept for backward compatibility)
-  targetName    String?              @map("target_name") // WooCommerce category name (auto-populated from wooCategory, kept for backward compatibility)
-  wooCategoryId String?              @map("woo_category_id") // Required for new mappings
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
-  site          Site                 @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  wooCategory   WooCommerceCategory? @relation(fields: [wooCategoryId], references: [id], onDelete: SetNull)
-
-  @@unique([siteId, sourceName])
-  @@map("category_mappings")
-}
 
 enum UserRole {
   USER
