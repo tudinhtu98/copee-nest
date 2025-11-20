@@ -213,15 +213,21 @@ export class UploadProcessor extends WorkerHost {
       regularPrice = String(product.price);
     }
     
-    const body = {
+    const body: any = {
       name: product.title || 'Copied product',
-      type: 'simple',
+      type: 'external', // External product - redirects to Shopee when clicking "Buy"
       regular_price: regularPrice,
       sale_price: salePrice,
       description: product.description || undefined,
       categories: categoryArray,
       images: uploadedImages.length > 0 ? uploadedImages : undefined,
     };
+    
+    // Add external URL and button text for Shopee link
+    if (product.sourceUrl) {
+      body.external_url = product.sourceUrl;
+      body.button_text = 'Mua ngay';
+    }
     
     console.log(`[Queue] 📦 Uploading product to WooCommerce: ${product.title} (${uploadedImages.length} images, category: ${categoryArray?.[0]?.id || categoryArray?.[0]?.name || 'none'})`);
 
