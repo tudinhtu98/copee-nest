@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -34,9 +35,24 @@ export class SitesController {
       baseUrl: string;
       wooConsumerKey: string;
       wooConsumerSecret: string;
+      wpUsername?: string;
+      wpApplicationPassword?: string;
     },
   ) {
     return this.sites.create(req.user.userId, body);
+  }
+
+  @Patch(':id')
+  update(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body()
+    body: {
+      wpUsername?: string;
+      wpApplicationPassword?: string;
+    },
+  ) {
+    return this.sites.update(req.user.userId, id, body);
   }
 
   @Delete(':id')

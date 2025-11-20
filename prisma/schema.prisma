@@ -30,6 +30,8 @@ model Site {
   baseUrl               String                @map("base_url")
   wooConsumerKey        String                @map("woo_consumer_key")
   wooConsumerSecret     String                @map("woo_consumer_secret")
+  wpUsername            String?               @map("wp_username") // WordPress username for Application Password
+  wpApplicationPassword String?               @map("wp_application_password") // WordPress Application Password (encrypted)
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
   categoryMappings      CategoryMapping[]

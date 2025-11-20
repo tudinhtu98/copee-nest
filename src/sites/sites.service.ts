@@ -20,9 +20,29 @@ export class SitesService {
       baseUrl: string;
       wooConsumerKey: string;
       wooConsumerSecret: string;
+      wpUsername?: string;
+      wpApplicationPassword?: string;
     },
   ) {
     return this.prisma.site.create({ data: { userId, ...input } });
+  }
+
+  async update(
+    userId: string,
+    id: string,
+    input: {
+      wpUsername?: string;
+      wpApplicationPassword?: string;
+    },
+  ) {
+    const site = await this.prisma.site.findFirst({ where: { id, userId } });
+    if (!site) {
+      throw new NotFoundException('Site không tồn tại');
+    }
+    return this.prisma.site.update({
+      where: { id },
+      data: input,
+    });
   }
 
   async remove(userId: string, id: string) {

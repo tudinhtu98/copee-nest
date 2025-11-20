@@ -28,10 +28,13 @@ export class UploadProcessor extends WorkerHost {
     const { jobId, productId, siteId, targetCategory, userId } = job.data;
 
     try {
-      // Get job, product, and site data
+      // Get job, product, and site data (including wpUsername and wpApplicationPassword)
       const uploadJob = await this.prisma.uploadJob.findUnique({
         where: { id: jobId },
-        include: { product: true, site: true },
+        include: { 
+          product: true, 
+          site: true,
+        },
       });
 
       if (!uploadJob) {
@@ -51,7 +54,7 @@ export class UploadProcessor extends WorkerHost {
         });
       }
 
-      console.log(`[Queue] Processing upload job ${jobId} for product ${uploadJob.product.title}`);
+      console.log(`[Queue] 🔄 Processing upload job ${jobId} for product: ${uploadJob.product.title}`);
 
       // Upload to WooCommerce
       const wcRes = await this.uploadToWoo(
@@ -143,8 +146,9 @@ export class UploadProcessor extends WorkerHost {
   }
 
   private async uploadToWoo(site: any, product: any, targetCategory?: string): Promise<any> {
+    // WooCommerce keys are REQUIRED for creating products via WooCommerce REST API
     if (!site.wooConsumerKey || !site.wooConsumerSecret || !site.baseUrl) {
-      throw new Error('Site chưa cấu hình WooCommerce API');
+      throw new Error('Site chưa cấu hình WooCommerce API keys. WooCommerce keys là bắt buộc để tạo sản phẩm.');
     }
 
     const auth = Buffer.from(
@@ -155,33 +159,17 @@ export class UploadProcessor extends WorkerHost {
     // Upload images to media library
     let uploadedImages: { src: string; name?: string }[] = [];
     if (Array.isArray(product.images) && product.images.length > 0) {
-      console.log(`[Queue][Upload] Starting to upload ${product.images.length} images to WordPress media library`);
+      console.log(`[Queue][Upload] 📸 Uploading ${product.images.length} images to WordPress`);
       for (let i = 0; i < product.images.length; i++) {
         const imgUrl = product.images[i];
         try {
-          console.log(`[Queue][Upload] Uploading image ${i + 1}/${product.images.length}: ${imgUrl}`);
           const mediaUrl = await this.uploadImageToMediaLibrary(site, imgUrl);
           uploadedImages.push({ src: mediaUrl });
-          console.log(`[Queue][Upload] Successfully uploaded image ${i + 1}/${product.images.length}: ${mediaUrl}`);
         } catch (e: any) {
-          const errorDetails = {
-            message: e.message,
-            stack: e.stack,
-            name: e.name,
-            url: imgUrl,
-          };
-          console.error(`[Queue][Upload] Failed to upload image ${i + 1}/${product.images.length} to WordPress:`, errorDetails);
-          
-          // Don't use Shopee URLs directly - WooCommerce will try to download them and timeout
-          // Skip this image - product will be created without it
-          // User can manually add images later or retry the job after fixing WordPress authentication
-          console.warn(`[Queue][Upload] Skipping image ${imgUrl} - WordPress upload failed. Product will be created without this image.`);
+          console.error(`[Queue][Upload] ❌ Failed to upload image ${i + 1}/${product.images.length}:`, e.message);
         }
       }
-      console.log(`[Queue][Upload] Images summary: ${uploadedImages.length}/${product.images.length} successfully uploaded to WordPress`);
-      if (uploadedImages.length < product.images.length) {
-        console.warn(`[Queue][Upload] ${product.images.length - uploadedImages.length} images failed to upload. Product will be created with ${uploadedImages.length} images.`);
-      }
+      console.log(`[Queue][Upload] 📊 Images: ${uploadedImages.length}/${product.images.length} uploaded successfully`);
     }
 
     // Map category with priority: categoryId > targetCategory > mapping > categoryName
@@ -194,7 +182,6 @@ export class UploadProcessor extends WorkerHost {
       // Priority 2: Use target category ID (always ID, never name)
       const categoryId = String(targetCategory);
       categoryArray = [{ id: categoryId }];
-      console.log(`[Queue] Using category ID from targetCategory: ${categoryId}`);
     } else if (product.category) {
       // Priority 3: Check for category mapping
       const mapping = (await this.prisma.categoryMapping.findFirst({
@@ -224,11 +211,7 @@ export class UploadProcessor extends WorkerHost {
 
     // Log warning if no images available
     if (uploadedImages.length === 0 && Array.isArray(product.images) && product.images.length > 0) {
-      console.warn(`[Queue][Upload] WARNING: No images available. All ${product.images.length} images failed to upload. Product will be created without images.`);
-      // Don't throw error - allow product creation without images
-      // User can manually add images later or retry the job
-    } else if (uploadedImages.length > 0) {
-      console.log(`[Queue][Upload] Images ready for product: ${uploadedImages.length} images`);
+      console.warn(`[Queue][Upload] ⚠️ All ${product.images.length} images failed to upload. Product will be created without images.`);
     }
 
     // WooCommerce pricing:
@@ -262,20 +245,7 @@ export class UploadProcessor extends WorkerHost {
       images: uploadedImages.length > 0 ? uploadedImages : undefined,
     };
     
-    console.log('[Queue] Uploading product to WooCommerce:', {
-      productTitle: product.title,
-      categoryArray,
-      targetCategory,
-      productCategory: product.category,
-      productCategoryId: product.categoryId,
-      regularPrice,
-      salePrice,
-      originalPrice: product.originalPrice,
-      currentPrice: product.price,
-      imagesCount: uploadedImages.length,
-      totalImagesAttempted: Array.isArray(product.images) ? product.images.length : 0,
-      images: uploadedImages.length > 0 ? uploadedImages.map(img => img.src) : 'NO IMAGES',
-    });
+    console.log(`[Queue] 📦 Uploading product to WooCommerce: ${product.title} (${uploadedImages.length} images, category: ${categoryArray?.[0]?.id || categoryArray?.[0]?.name || 'none'})`);
 
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -311,11 +281,7 @@ export class UploadProcessor extends WorkerHost {
       throw new Error(`WooCommerce API returned success but no product ID. Response: ${JSON.stringify(responseData).substring(0, 200)}`);
     }
     
-    console.log(`[Queue] Successfully uploaded product to WooCommerce:`, {
-      productId: responseData.id,
-      productTitle: product.title,
-      siteUrl: site.baseUrl,
-    });
+    console.log(`[Queue] ✅ Product uploaded successfully: ID ${responseData.id} - ${product.title}`);
     
     return responseData;
   }
@@ -323,15 +289,25 @@ export class UploadProcessor extends WorkerHost {
   private async uploadImageToMediaLibrary(site: any, imageUrl: string): Promise<string> {
     const mediaEndpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/media`;
     
-    // WordPress REST API may not accept WooCommerce credentials
-    // Try WooCommerce credentials first, but log if it fails
-    const auth = Buffer.from(
-      `${site.wooConsumerKey}:${site.wooConsumerSecret}`,
-    ).toString('base64');
+    // Priority: Use Application Password if available, otherwise fallback to WooCommerce credentials
+    const siteAny = site as any;
+    let auth: string;
+    let authMethod: string;
     
-    console.log(`[Queue][Image Upload] Using WordPress REST API with WooCommerce credentials`);
-    console.log(`[Queue][Image Upload] Endpoint: ${mediaEndpoint}`);
-    console.log(`[Queue][Image Upload] Note: If this fails with 401/403, WordPress may require Application Password instead of WooCommerce keys`);
+    if (siteAny.wpUsername && siteAny.wpApplicationPassword) {
+      auth = Buffer.from(
+        `${siteAny.wpUsername}:${siteAny.wpApplicationPassword}`,
+      ).toString('base64');
+      authMethod = 'Application Password';
+    } else {
+      if (!site.wooConsumerKey || !site.wooConsumerSecret) {
+        throw new Error('Cần cấu hình Application Password hoặc WooCommerce keys để upload hình ảnh. Application Password được khuyến nghị.');
+      }
+      auth = Buffer.from(
+        `${site.wooConsumerKey}:${site.wooConsumerSecret}`,
+      ).toString('base64');
+      authMethod = 'WooCommerce Keys (fallback)';
+    }
 
     // Download image with timeout and retry
     let imageRes: Response | undefined;
@@ -345,7 +321,9 @@ export class UploadProcessor extends WorkerHost {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
 
-        console.log(`[Queue][Image Upload] Downloading image (attempt ${attempt}/${maxRetries}): ${imageUrl}`);
+        if (attempt === 1) {
+          console.log(`[Queue][Image Upload] Downloading: ${imageUrl.substring(0, 80)}...`);
+        }
 
         imageRes = await fetch(imageUrl, {
           signal: controller.signal,
@@ -375,18 +353,8 @@ export class UploadProcessor extends WorkerHost {
         break; // Success, exit retry loop
         } catch (error: any) {
         lastError = error;
-        const errorDetails = {
-          message: error.message,
-          name: error.name,
-          code: error.code,
-          cause: error.cause,
-        };
-        console.warn(`[Queue][Image Upload] Attempt ${attempt}/${maxRetries} failed:`, errorDetails);
-
         if (attempt < maxRetries) {
-          // Wait before retry (exponential backoff)
           const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-          console.log(`[Queue][Image Upload] Retrying in ${delay}ms...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
@@ -396,27 +364,89 @@ export class UploadProcessor extends WorkerHost {
       throw new Error(`Failed to download image after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
     }
 
-    const imageType = imageRes.headers.get('content-type') || 'image/jpeg';
-    const fileName = imageUrl.split('/').pop() || 'image.jpg';
+    // Get and normalize Content-Type
+    let imageType = imageRes.headers.get('content-type') || 'image/jpeg';
+    
+    // Remove charset and other parameters from MIME type (e.g., "image/jpeg;charset=UTF-8" -> "image/jpeg")
+    imageType = imageType.split(';')[0].trim().toLowerCase();
+    
+    // Validate and map to allowed WordPress MIME types
+    const allowedMimeTypes: Record<string, string> = {
+      'image/jpeg': 'image/jpeg',
+      'image/jpg': 'image/jpeg',
+      'image/png': 'image/png',
+      'image/gif': 'image/gif',
+      'image/webp': 'image/webp',
+      'image/bmp': 'image/bmp',
+      'image/tiff': 'image/tiff',
+    };
+    
+    // If not in allowed list, default to jpeg
+    if (!allowedMimeTypes[imageType]) {
+      console.warn(`[Queue][Image Upload] ⚠️ Unknown MIME type: ${imageType}, defaulting to image/jpeg`);
+      imageType = 'image/jpeg';
+    } else {
+      imageType = allowedMimeTypes[imageType];
+    }
+    
+    // Extract file name and ensure it has proper extension
+    let fileName = imageUrl.split('/').pop() || 'image.jpg';
+    
+    // Remove query parameters from filename
+    fileName = fileName.split('?')[0];
+    
+    // Add extension if missing
+    const extensionMap: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/gif': '.gif',
+      'image/webp': '.webp',
+      'image/bmp': '.bmp',
+      'image/tiff': '.tiff',
+    };
+    
+    const extension = extensionMap[imageType] || '.jpg';
+    if (!fileName.toLowerCase().endsWith(extension)) {
+      // Remove any existing extension and add correct one
+      const nameWithoutExt = fileName.split('.')[0];
+      fileName = `${nameWithoutExt}${extension}`;
+    }
 
     // Upload to WordPress media library
     const formData = new FormData();
-    // Convert Buffer to Uint8Array for Blob
-    const blob = new Blob([new Uint8Array(imageBuffer)], { type: imageType });
+    const cleanMimeType = imageType.split(';')[0].trim();
+    const blob = new Blob([new Uint8Array(imageBuffer)], { type: cleanMimeType });
     formData.append('file', blob, fileName);
-
-    console.log(`[Queue][Image Upload] Uploading to WordPress media library: ${mediaEndpoint}`);
-    console.log(`[Queue][Image Upload] Image size: ${(imageBuffer.length / 1024).toFixed(2)} KB`);
-    console.log(`[Queue][Image Upload] Image type: ${imageType}, File name: ${fileName}`);
     
-    const uploadRes = await fetch(mediaEndpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        // Don't set Content-Type - let browser set it with boundary for multipart/form-data
-      },
-      body: formData,
-    });
+    console.log(`[Queue][Image Upload] 📤 Uploading to WordPress (${(imageBuffer.length / 1024).toFixed(0)} KB, ${imageType})`);
+    
+    // Upload to WordPress with timeout (60 seconds)
+    const uploadController = new AbortController();
+    const uploadTimeoutId = setTimeout(() => uploadController.abort(), 60000);
+    
+    let uploadRes: Response;
+    try {
+      uploadRes = await fetch(mediaEndpoint, {
+        method: 'POST',
+        signal: uploadController.signal,
+        headers: {
+          Authorization: `Basic ${auth}`,
+        },
+        body: formData,
+      });
+      clearTimeout(uploadTimeoutId);
+    } catch (error: any) {
+      clearTimeout(uploadTimeoutId);
+      console.error(`[Queue][Image Upload] ❌ Upload request failed:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+      if (error.name === 'AbortError') {
+        throw new Error(`Upload timeout: WordPress server did not respond within 60 seconds`);
+      }
+      throw error;
+    }
 
     if (!uploadRes.ok) {
       const errorText = await uploadRes.text().catch(() => 'Unable to read error response');
@@ -433,23 +463,18 @@ export class UploadProcessor extends WorkerHost {
           errorMessage = `${errorMessage}. Data: ${JSON.stringify(errorData.data)}`;
         }
       } catch (e) {
-        // If not JSON, include first 500 chars of response
-        errorMessage = `${errorMessage}. Response: ${errorText.substring(0, 500)}`;
+        errorMessage = `${errorMessage}. Response: ${errorText.substring(0, 200)}`;
       }
       
-      console.error(`[Queue][Image Upload] WordPress upload failed:`, {
-        status: uploadRes.status,
-        statusText: uploadRes.statusText,
-        endpoint: mediaEndpoint,
-        imageSize: `${(imageBuffer.length / 1024).toFixed(2)} KB`,
-        imageType,
-        errorMessage,
-        fullErrorResponse: errorText.substring(0, 1000), // Log first 1000 chars for debugging
-      });
+      console.error(`[Queue][Image Upload] ❌ Upload failed (${uploadRes.status}): ${errorMessage.substring(0, 150)}`);
       
       // Provide helpful error message based on status code
       if (uploadRes.status === 401 || uploadRes.status === 403) {
-        errorMessage = `${errorMessage}\n\nNOTE: WordPress REST API may require Application Password instead of WooCommerce API keys. Please check WordPress settings.`;
+        if (authMethod === 'WooCommerce Keys') {
+          errorMessage = `${errorMessage}\n\nNOTE: WordPress REST API may require Application Password instead of WooCommerce API keys. Please configure Application Password in Settings → WordPress Authentication tab.`;
+        } else {
+          errorMessage = `${errorMessage}\n\nNOTE: Application Password authentication failed. Please verify the username and password are correct in Settings → WordPress Authentication tab.`;
+        }
       } else if (uploadRes.status === 413) {
         errorMessage = `${errorMessage}\n\nNOTE: Image file is too large. WordPress may have file size limits.`;
       } else if (uploadRes.status === 415) {
@@ -459,15 +484,28 @@ export class UploadProcessor extends WorkerHost {
       throw new Error(errorMessage);
     }
 
-    const mediaData = await uploadRes.json();
-    
-    if (!mediaData || !mediaData.source_url) {
-      console.error(`[Queue][Image Upload] WordPress response missing source_url:`, mediaData);
-      throw new Error(`WordPress API returned success but no source_url. Response: ${JSON.stringify(mediaData).substring(0, 200)}`);
+    let mediaData: any;
+    try {
+      const responseText = await uploadRes.text();
+      mediaData = JSON.parse(responseText);
+    } catch (parseError: any) {
+      console.error(`[Queue][Image Upload] ❌ Failed to parse WordPress response:`, {
+        error: parseError.message,
+        status: uploadRes.status,
+        contentType: uploadRes.headers.get('content-type'),
+      });
+      throw new Error(`WordPress API returned invalid JSON response. Status: ${uploadRes.status}`);
     }
     
-    console.log(`[Queue][Image Upload] Successfully uploaded to WordPress: ${mediaData.source_url}`);
-    return mediaData.source_url;
+    // WordPress may return source_url, url, or guid.rendered
+    const uploadedImageUrl = mediaData.source_url || mediaData.url || (mediaData.guid && mediaData.guid.rendered) || mediaData.guid;
+    
+    if (!uploadedImageUrl) {
+      throw new Error(`WordPress API returned success but no image URL found. Response keys: ${Object.keys(mediaData).join(', ')}`);
+    }
+    
+    console.log(`[Queue][Image Upload] ✅ Uploaded: ${uploadedImageUrl.substring(0, 80)}...`);
+    return uploadedImageUrl;
   }
 }
 
