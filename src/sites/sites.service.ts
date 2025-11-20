@@ -266,15 +266,7 @@ export class SitesService {
   async testConnection(userId: string, siteId: string) {
     const site = await this.prisma.site.findFirst({
       where: { id: siteId, userId },
-      select: {
-        id: true,
-        baseUrl: true,
-        wooConsumerKey: true,
-        wooConsumerSecret: true,
-        wpUsername: true,
-        wpApplicationPassword: true,
-      },
-    });
+    }) as any;
     if (!site) {
       throw new NotFoundException('Site không tồn tại');
     }
