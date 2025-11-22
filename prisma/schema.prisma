@@ -20,6 +20,7 @@ model User {
   sites        Site[]
   transactions Transaction[]
   refreshTokens RefreshToken[]
+  apiKeys      ApiKey[]
 
   @@map("users")
 }
@@ -126,6 +127,23 @@ model RefreshToken {
   @@index([token])
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  key         String    @unique // Hashed API key
+  name        String    // User-defined name for the key
+  userId      String    @map("user_id")
+  permissions String[]  // Array of permissions: ["products:read", "products:write"]
+  lastUsedAt  DateTime? @map("last_used_at")
+  expiresAt   DateTime? @map("expires_at") // Optional expiration
+  createdAt   DateTime  @default(now()) @map("created_at")
+  revokedAt   DateTime? @map("revoked_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([key])
+  @@index([userId])
+  @@map("api_keys")
 }
 
 

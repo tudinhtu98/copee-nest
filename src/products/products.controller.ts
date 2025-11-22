@@ -10,13 +10,18 @@ import {
   UseGuards,
   Query,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ProductsService } from './products.service';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
+import { JwtOrApiKeyGuard } from '../auth/jwt-or-api-key.guard';
+import { SetMetadata } from '@nestjs/common';
 
-@UseGuards(AuthGuard('jwt'))
+// Decorator for API key permissions
+export const RequirePermissions = (...permissions: string[]) =>
+  SetMetadata('permissions', permissions);
+
+@UseGuards(JwtOrApiKeyGuard)
 @Roles(UserRole.USER)
 @Controller('products')
 export class ProductsController {
@@ -88,6 +93,7 @@ export class ProductsController {
   }
 
   @Post('copy')
+  @RequirePermissions('products:write')
   copy(
     @Req() req: AuthenticatedRequest,
     @Body()

@@ -11,6 +11,7 @@ import { BillingModule } from './billing/billing.module';
 import { AdminModule } from './admin/admin.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UploadModule } from './upload/upload.module';
+import { ApiKeysModule } from './api-keys/api-keys.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UploadModule } from './upload/upload.module';
     BillingModule,
     AdminModule,
     UploadModule,
+    ApiKeysModule,
   ],
   controllers: [AppController],
   providers: [AppService],

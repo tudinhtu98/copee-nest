@@ -104,9 +104,9 @@ export class AuthService {
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 ngày
 
     await this.prisma.$transaction([
-      // Xóa token cũ
-      this.prisma.refreshToken.delete({
-        where: { id: tokenRecord.id },
+      // Xóa token cũ (sử dụng deleteMany để tránh lỗi nếu token đã bị xóa)
+      this.prisma.refreshToken.deleteMany({
+        where: { token: refreshToken },
       }),
       // Tạo token mới
       this.prisma.refreshToken.create({

@@ -4,7 +4,9 @@ import { UserRole } from '@prisma/client'
 export interface AuthenticatedRequest extends Request {
   user: {
     userId: string
-    role: UserRole
+    role?: UserRole
     username?: string
+    permissions?: string[]
+    isApiKey?: boolean
   }
 }
