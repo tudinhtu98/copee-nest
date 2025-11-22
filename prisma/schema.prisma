@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id           String        @id @default(cuid())
-  email        String        @unique
-  username     String        @unique
-  passwordHash String        @map("password_hash")
-  role         UserRole      @default(USER)
-  balance      Int           @default(0)
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id           String         @id @default(cuid())
+  email        String         @unique
+  username     String         @unique
+  passwordHash String         @map("password_hash")
+  role         UserRole       @default(USER)
+  balance      Int            @default(0)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
   products     Product[]
   sites        Site[]
   transactions Transaction[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
 }
@@ -112,6 +113,19 @@ model WooCommerceCategory {
 
   @@unique([siteId, wooId])
   @@map("woocommerce_categories")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
 }
 
 
