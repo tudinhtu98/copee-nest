@@ -535,6 +535,162 @@ export class AdminService {
     }
     return start;
   }
+
+  async listSites(params: { page?: number; limit?: number; search?: string; userId?: string }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (params.search) {
+      where.OR = [
+        { name: { contains: params.search, mode: 'insensitive' as const } },
+        { baseUrl: { contains: params.search, mode: 'insensitive' as const } },
+      ];
+    }
+
+    if (params.userId) {
+      where.userId = params.userId;
+    }
+
+    const [sites, total] = await this.prisma.$transaction([
+      this.prisma.site.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              email: true,
+              username: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.site.count({ where }),
+    ]);
+
+    return {
+      sites,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async listCategories(params: { page?: number; limit?: number; search?: string }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {
+      category: { not: null },
+    };
+
+    if (params.search) {
+      where.category = {
+        contains: params.search,
+        mode: 'insensitive' as const,
+      };
+    }
+
+    // Get unique categories with count
+    const categoriesRaw = await this.prisma.product.groupBy({
+      by: ['category'],
+      where,
+      _count: { _all: true },
+      orderBy: { category: 'asc' },
+    });
+
+    const total = categoriesRaw.length;
+    const paginated = categoriesRaw.slice(skip, skip + limit);
+
+    const categories = paginated
+      .filter((item) => item.category)
+      .map((item) => ({
+        category: item.category as string,
+        count: item._count._all,
+      }));
+
+    return {
+      categories,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async listProducts(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    category?: string;
+    userId?: string;
+  }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+
+    if (params.search) {
+      where.OR = [
+        { title: { contains: params.search, mode: 'insensitive' as const } },
+        { description: { contains: params.search, mode: 'insensitive' as const } },
+        { category: { contains: params.search, mode: 'insensitive' as const } },
+        { sourceUrl: { contains: params.search, mode: 'insensitive' as const } },
+      ];
+    }
+
+    if (params.status) {
+      where.status = params.status;
+    }
+
+    if (params.category) {
+      where.category = params.category;
+    }
+
+    if (params.userId) {
+      where.userId = params.userId;
+    }
+
+    const [products, total] = await this.prisma.$transaction([
+      this.prisma.product.findMany({
+        where,
+        include: {
+          user: {
+            select: {
+              email: true,
+              username: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.product.count({ where }),
+    ]);
+
+    return {
+      products,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
 }
 
 

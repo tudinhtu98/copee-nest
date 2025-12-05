@@ -128,6 +128,53 @@ export class AdminController {
   unbanUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.admin.unbanUser(id, req.user.role);
   }
+
+  @Get('sites')
+  listSites(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.admin.listSites({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+      userId,
+    });
+  }
+
+  @Get('categories')
+  listCategories(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.admin.listCategories({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+    });
+  }
+
+  @Get('products')
+  listProducts(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('category') category?: string,
+    @Query('userId') userId?: string,
+  ) {
+    return this.admin.listProducts({
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+      search,
+      status,
+      category,
+      userId,
+    });
+  }
 }
 
 
