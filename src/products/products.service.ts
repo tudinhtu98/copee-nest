@@ -31,16 +31,95 @@ export class ProductsService {
     const limit = options?.limit || 20
     const skip = (page - 1) * limit
 
-    const where: any = { userId }
-
+    // Use raw query with unaccent for Vietnamese search without diacritics
     if (options?.search) {
-      where.OR = [
-        { title: { contains: options.search, mode: 'insensitive' } },
-        { description: { contains: options.search, mode: 'insensitive' } },
-        { category: { contains: options.search, mode: 'insensitive' } },
-        { sourceUrl: { contains: options.search, mode: 'insensitive' } },
-      ]
+      const searchTerm = `%${options.search}%`
+      const paramsList: any[] = [searchTerm, userId]
+      let paramIndex = 3
+      
+      let additionalConditions = 'AND p.user_id = $2'
+      if (options.status) {
+        additionalConditions += ` AND p.status = $${paramIndex}`
+        paramsList.push(options.status)
+        paramIndex++
+      }
+      
+      const sortBy = options.sortBy || 'created_at'
+      const sortOrder = options.sortOrder || 'desc'
+      const sortColumn = sortBy === 'createdAt' ? 'created_at' : sortBy
+      
+      paramsList.push(limit, skip)
+
+      const [itemsRaw, totalRaw] = await Promise.all([
+        this.prisma.$queryRawUnsafe<Array<{
+          id: string
+          title: string | null
+          source_url: string
+          status: string
+          category: string | null
+          price: number | null
+          original_price: number | null
+          description: string | null
+          images: string[] | null
+          currency: string | null
+          created_at: Date
+          updated_at: Date | null
+        }>>(
+          `SELECT p.*
+           FROM products p
+           WHERE (unaccent(p.title) ILIKE unaccent($1) 
+                  OR unaccent(p.description) ILIKE unaccent($1)
+                  OR unaccent(p.category) ILIKE unaccent($1)
+                  OR unaccent(p.source_url) ILIKE unaccent($1))
+           ${additionalConditions}
+           ORDER BY p.${sortColumn} ${sortOrder.toUpperCase()}
+           LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+          ...paramsList,
+        ),
+        this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+          `SELECT COUNT(*)::int as count
+           FROM products p
+           WHERE (unaccent(p.title) ILIKE unaccent($1) 
+                  OR unaccent(p.description) ILIKE unaccent($1)
+                  OR unaccent(p.category) ILIKE unaccent($1)
+                  OR unaccent(p.source_url) ILIKE unaccent($1))
+           ${additionalConditions}`,
+          searchTerm,
+          userId,
+          ...(options.status ? [options.status] : []),
+        ),
+      ])
+
+      const items = itemsRaw.map((item) => ({
+        id: item.id,
+        title: item.title,
+        sourceUrl: item.source_url,
+        status: item.status as any,
+        category: item.category,
+        price: item.price,
+        originalPrice: item.original_price,
+        description: item.description,
+        images: item.images,
+        currency: item.currency,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      }))
+
+      const total = Number(totalRaw[0]?.count || 0)
+
+      return {
+        items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      }
     }
+
+    // Normal query when no search
+    const where: any = { userId }
 
     if (options?.status) {
       where.status = options.status

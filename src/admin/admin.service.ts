@@ -266,21 +266,78 @@ export class AdminService {
     const limit = params.limit ?? 20;
     const skip = (page - 1) * limit;
 
-    let where: any = params.search
-      ? {
-          OR: [
-            { email: { contains: params.search, mode: 'insensitive' as const } },
-            { username: { contains: params.search, mode: 'insensitive' as const } },
-          ],
-        }
-      : {};
+    // Use raw query with unaccent for Vietnamese search without diacritics
+    if (params.search) {
+      const searchTerm = `%${params.search}%`;
+      const paramsList: any[] = [searchTerm];
+      let paramIndex = 2;
+      
+      let roleCondition = '';
+      if (params.actorRole === UserRole.MOD) {
+        roleCondition = `AND u.role = $${paramIndex}`;
+        paramsList.push(UserRole.USER);
+        paramIndex++;
+      }
+      
+      paramsList.push(limit, skip);
 
-    // Mod chỉ có thể xem USER, Admin có thể xem tất cả
-    if (params.actorRole === UserRole.MOD) {
-      where = {
-        ...where,
-        role: UserRole.USER,
+      const [usersRaw, totalRaw] = await Promise.all([
+        this.prisma.$queryRawUnsafe<Array<{
+          id: string;
+          email: string;
+          username: string | null;
+          role: string;
+          balance: number;
+          banned_at: Date | null;
+          created_at: Date;
+          updated_at: Date | null;
+        }>>(
+          `SELECT u.*
+           FROM users u
+           WHERE (unaccent(u.email) ILIKE unaccent($1) OR unaccent(u.username) ILIKE unaccent($1))
+           ${roleCondition}
+           ORDER BY u.created_at DESC
+           LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+          ...paramsList,
+        ),
+        this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+          `SELECT COUNT(*)::int as count
+           FROM users u
+           WHERE (unaccent(u.email) ILIKE unaccent($1) OR unaccent(u.username) ILIKE unaccent($1))
+           ${roleCondition}`,
+          searchTerm,
+          ...(params.actorRole === UserRole.MOD ? [UserRole.USER] : []),
+        ),
+      ]);
+
+      const users = usersRaw.map((user) => ({
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        role: user.role as UserRole,
+        balance: user.balance,
+        bannedAt: user.banned_at?.toISOString() || null,
+        createdAt: user.created_at.toISOString(),
+        updatedAt: user.updated_at?.toISOString(),
+      }));
+
+      const total = Number(totalRaw[0]?.count || 0);
+
+      return {
+        users,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
       };
+    }
+
+    // Normal query when no search
+    let where: any = {};
+    if (params.actorRole === UserRole.MOD) {
+      where.role = UserRole.USER;
     }
 
     const [users, total] = await this.prisma.$transaction([
@@ -544,9 +601,21 @@ export class AdminService {
     const where: any = {};
 
     if (params.search) {
+      // Use unaccent for Vietnamese search without diacritics
+      // PostgreSQL unaccent extension handles this automatically when enabled
       where.OR = [
-        { name: { contains: params.search, mode: 'insensitive' as const } },
-        { baseUrl: { contains: params.search, mode: 'insensitive' as const } },
+        {
+          name: {
+            contains: params.search,
+            mode: 'insensitive' as const,
+          },
+        },
+        {
+          baseUrl: {
+            contains: params.search,
+            mode: 'insensitive' as const,
+          },
+        },
       ];
     }
 
@@ -554,6 +623,72 @@ export class AdminService {
       where.userId = params.userId;
     }
 
+    // If search is provided, use raw query with unaccent for better Vietnamese support
+    if (params.search) {
+      const searchTerm = `%${params.search}%`;
+      const userIdCondition = params.userId ? `AND s.user_id = $${params.userId ? '3' : '2'}` : '';
+      const userIdParam = params.userId ? [params.userId] : [];
+
+      const [sitesRaw, totalRaw] = await Promise.all([
+        this.prisma.$queryRawUnsafe<Array<{
+          id: string;
+          name: string;
+          base_url: string;
+          user_id: string;
+          created_at: Date;
+          user_email: string | null;
+          user_username: string | null;
+        }>>(
+          `SELECT s.*, u.email as user_email, u.username as user_username
+           FROM sites s
+           LEFT JOIN users u ON s.user_id = u.id
+           WHERE (unaccent(s.name) ILIKE unaccent($1) OR unaccent(s.base_url) ILIKE unaccent($1))
+           ${userIdCondition}
+           ORDER BY s.created_at DESC
+           LIMIT $${params.userId ? '4' : '2'} OFFSET $${params.userId ? '5' : '3'}`,
+          searchTerm,
+          limit,
+          skip,
+          ...userIdParam,
+        ),
+        this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+          `SELECT COUNT(*)::int as count
+           FROM sites s
+           WHERE (unaccent(s.name) ILIKE unaccent($1) OR unaccent(s.base_url) ILIKE unaccent($1))
+           ${userIdCondition}`,
+          searchTerm,
+          ...userIdParam,
+        ),
+      ]);
+
+      const sites = sitesRaw.map((site) => ({
+        id: site.id,
+        name: site.name,
+        baseUrl: site.base_url,
+        userId: site.user_id,
+        createdAt: site.created_at,
+        user: site.user_email
+          ? {
+              email: site.user_email,
+              username: site.user_username,
+            }
+          : undefined,
+      }));
+
+      const total = Number(totalRaw[0]?.count || 0);
+
+      return {
+        sites,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    // Fallback to normal Prisma query when no search
     const [sites, total] = await this.prisma.$transaction([
       this.prisma.site.findMany({
         where,
@@ -592,13 +727,49 @@ export class AdminService {
       category: { not: null },
     };
 
+    // Use raw query with unaccent for Vietnamese search without diacritics
     if (params.search) {
-      where.category = {
-        contains: params.search,
-        mode: 'insensitive' as const,
+      const searchTerm = `%${params.search}%`;
+      const categoriesRaw = await this.prisma.$queryRawUnsafe<Array<{
+        category: string;
+        count: bigint;
+      }>>(
+        `SELECT category, COUNT(*)::int as count
+         FROM products
+         WHERE category IS NOT NULL AND unaccent(category) ILIKE unaccent($1)
+         GROUP BY category
+         ORDER BY category ASC
+         LIMIT $2 OFFSET $3`,
+        searchTerm,
+        limit,
+        skip,
+      );
+
+      const totalRaw = await this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+        `SELECT COUNT(DISTINCT category)::int as count
+         FROM products
+         WHERE category IS NOT NULL AND unaccent(category) ILIKE unaccent($1)`,
+        searchTerm,
+      );
+
+      const total = Number(totalRaw[0]?.count || 0);
+      const categories = categoriesRaw.map((item) => ({
+        category: item.category,
+        count: Number(item.count),
+      }));
+
+      return {
+        categories,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
       };
     }
 
+    // Normal query when no search
     // Get unique categories with count
     const categoriesRaw = await this.prisma.product.groupBy({
       by: ['category'],
@@ -642,6 +813,103 @@ export class AdminService {
 
     const where: any = {};
 
+    // Use raw query with unaccent for Vietnamese search without diacritics
+    if (params.search) {
+      const searchTerm = `%${params.search}%`;
+      const paramsList: any[] = [searchTerm];
+      let paramIndex = 2;
+      
+      let additionalConditions = '';
+      if (params.status) {
+        additionalConditions += `AND p.status = $${paramIndex}`;
+        paramsList.push(params.status);
+        paramIndex++;
+      }
+      if (params.category) {
+        additionalConditions += `AND p.category = $${paramIndex}`;
+        paramsList.push(params.category);
+        paramIndex++;
+      }
+      if (params.userId) {
+        additionalConditions += `AND p.user_id = $${paramIndex}`;
+        paramsList.push(params.userId);
+        paramIndex++;
+      }
+      
+      paramsList.push(limit, skip);
+
+      const [productsRaw, totalRaw] = await Promise.all([
+        this.prisma.$queryRawUnsafe<Array<{
+          id: string;
+          title: string | null;
+          source_url: string;
+          status: string;
+          category: string | null;
+          price: number | null;
+          original_price: number | null;
+          created_at: Date;
+          user_id: string;
+          user_email: string | null;
+          user_username: string | null;
+        }>>(
+          `SELECT p.*, u.email as user_email, u.username as user_username
+           FROM products p
+           LEFT JOIN users u ON p.user_id = u.id
+           WHERE (unaccent(p.title) ILIKE unaccent($1) 
+                  OR unaccent(p.description) ILIKE unaccent($1)
+                  OR unaccent(p.category) ILIKE unaccent($1)
+                  OR unaccent(p.source_url) ILIKE unaccent($1))
+           ${additionalConditions}
+           ORDER BY p.created_at DESC
+           LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+          ...paramsList,
+        ),
+        this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+          `SELECT COUNT(*)::int as count
+           FROM products p
+           WHERE (unaccent(p.title) ILIKE unaccent($1) 
+                  OR unaccent(p.description) ILIKE unaccent($1)
+                  OR unaccent(p.category) ILIKE unaccent($1)
+                  OR unaccent(p.source_url) ILIKE unaccent($1))
+           ${additionalConditions}`,
+          searchTerm,
+          ...(params.status ? [params.status] : []),
+          ...(params.category ? [params.category] : []),
+          ...(params.userId ? [params.userId] : []),
+        ),
+      ]);
+
+      const products = productsRaw.map((product) => ({
+        id: product.id,
+        title: product.title,
+        sourceUrl: product.source_url,
+        status: product.status as any,
+        category: product.category,
+        price: product.price,
+        originalPrice: product.original_price,
+        createdAt: product.created_at.toISOString(),
+        user: product.user_email
+          ? {
+              email: product.user_email,
+              username: product.user_username,
+            }
+          : undefined,
+      }));
+
+      const total = Number(totalRaw[0]?.count || 0);
+
+      return {
+        products,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    // Normal query when no search
     if (params.search) {
       where.OR = [
         { title: { contains: params.search, mode: 'insensitive' as const } },
