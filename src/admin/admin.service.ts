@@ -105,8 +105,11 @@ export class AdminService {
     };
   }
 
-  async stats(range: StatsRange) {
+  async stats(range: StatsRange, type?: string, page?: number, limit?: number) {
     const start = this.getRangeStart(range);
+    const currentPage = page ?? 1;
+    const pageLimit = limit ?? 10;
+    const skip = (currentPage - 1) * pageLimit;
 
     const [topUsersRaw, topSitesRaw, topProductsRaw, topCategoriesRaw] =
       await this.prisma.$transaction([
@@ -145,21 +148,39 @@ export class AdminService {
     };
 
     const sortedUsers = [...topUsersRaw]
-      .sort((a, b) => (a._sum?.amount ?? 0) - (b._sum?.amount ?? 0))
-      .slice(0, 5);
+      .sort((a, b) => (a._sum?.amount ?? 0) - (b._sum?.amount ?? 0));
     const sortedSites = [...topSitesRaw]
-      .sort((a, b) => countValue(b._count) - countValue(a._count))
-      .slice(0, 5);
+      .sort((a, b) => countValue(b._count) - countValue(a._count));
     const sortedProducts = [...topProductsRaw]
-      .sort((a, b) => countValue(b._count) - countValue(a._count))
-      .slice(0, 5);
+      .sort((a, b) => countValue(b._count) - countValue(a._count));
     const sortedCategories = [...topCategoriesRaw]
-      .sort((a, b) => countValue(b._count) - countValue(a._count))
-      .slice(0, 5);
+      .sort((a, b) => countValue(b._count) - countValue(a._count));
 
-    const userIds = sortedUsers.map((item) => item.userId);
-    const siteIds = sortedSites.map((item) => item.siteId);
-    const productIds = sortedProducts.map((item) => item.productId);
+    // Get totals before pagination
+    const totalUsers = sortedUsers.length;
+    const totalSites = sortedSites.length;
+    const totalProducts = sortedProducts.length;
+    const totalCategories = sortedCategories.length;
+
+    // Apply pagination before fetching details - only for selected type
+    let paginatedUsersRaw = sortedUsers;
+    let paginatedSitesRaw = sortedSites;
+    let paginatedProductsRaw = sortedProducts;
+    let paginatedCategoriesRaw = sortedCategories;
+
+    if (type === 'users') {
+      paginatedUsersRaw = sortedUsers.slice(skip, skip + pageLimit);
+    } else if (type === 'sites') {
+      paginatedSitesRaw = sortedSites.slice(skip, skip + pageLimit);
+    } else if (type === 'products') {
+      paginatedProductsRaw = sortedProducts.slice(skip, skip + pageLimit);
+    } else if (type === 'categories') {
+      paginatedCategoriesRaw = sortedCategories.slice(skip, skip + pageLimit);
+    }
+
+    const userIds = paginatedUsersRaw.map((item) => item.userId);
+    const siteIds = paginatedSitesRaw.map((item) => item.siteId);
+    const productIds = paginatedProductsRaw.map((item) => item.productId);
 
     const [users, sites, products] = await Promise.all([
       userIds.length
@@ -182,7 +203,7 @@ export class AdminService {
         : Promise.resolve([] as { id: string; title: string; sourceUrl: string }[]),
     ]);
 
-    const topUsers = sortedUsers.map((item) => {
+    const topUsers = paginatedUsersRaw.map((item) => {
       const info = users.find((user) => user.id === item.userId);
       return {
         userId: item.userId,
@@ -192,7 +213,7 @@ export class AdminService {
       };
     });
 
-    const topSites = sortedSites.map((item) => {
+    const topSites = paginatedSitesRaw.map((item) => {
       const info = sites.find((site) => site.id === item.siteId);
       return {
         siteId: item.siteId,
@@ -202,7 +223,7 @@ export class AdminService {
       };
     });
 
-    const topProducts = sortedProducts.map((item) => {
+    const topProducts = paginatedProductsRaw.map((item) => {
       const info = products.find((product) => product.id === item.productId);
       return {
         productId: item.productId,
@@ -212,9 +233,18 @@ export class AdminService {
       };
     });
 
-    const topCategories = sortedCategories
+    const topCategories = paginatedCategoriesRaw
       .filter((item) => item.category)
       .map((item) => ({ category: item.category as string, count: countValue(item._count) }));
+
+    const getTotal = () => {
+      if (type === 'users') return totalUsers;
+      if (type === 'sites') return totalSites;
+      if (type === 'products') return totalProducts;
+      return totalCategories;
+    };
+
+    const total = getTotal();
 
     return {
       range,
@@ -222,6 +252,12 @@ export class AdminService {
       topSites,
       topProducts,
       topCategories,
+      pagination: {
+        page: currentPage,
+        limit: pageLimit,
+        total,
+        totalPages: Math.ceil(total / pageLimit),
+      },
     };
   }
 

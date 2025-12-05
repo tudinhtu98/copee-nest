@@ -45,6 +45,9 @@ export class AdminController {
   @Get('stats')
   stats(
     @Query('range') range: 'week' | 'month' | 'quarter' | 'year' = 'week',
+    @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const allowed: Record<string, 'week' | 'month' | 'quarter' | 'year'> = {
       week: 'week',
@@ -53,7 +56,12 @@ export class AdminController {
       year: 'year',
     };
     const period = allowed[range] ?? 'week';
-    return this.admin.stats(period);
+    return this.admin.stats(
+      period,
+      type,
+      page ? parseInt(page, 10) : undefined,
+      limit ? parseInt(limit, 10) : undefined,
+    );
   }
 
   @Get('users')
