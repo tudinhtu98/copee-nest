@@ -14,15 +14,70 @@ export class AdminService {
   ) {}
 
   async summary() {
-    const [users, spent] = await this.prisma.$transaction([
+    const [
+      users,
+      activeUsers,
+      bannedUsers,
+      products,
+      readyProducts,
+      uploadedProducts,
+      sites,
+      uploadJobs,
+      pendingJobs,
+      successJobs,
+      failedJobs,
+      transactions,
+      totalSpent,
+      totalCredit,
+    ] = await this.prisma.$transaction([
       this.prisma.user.count(),
+      this.prisma.user.count({ where: { bannedAt: null } }),
+      this.prisma.user.count({ where: { bannedAt: { not: null } } }),
+      this.prisma.product.count(),
+      this.prisma.product.count({ where: { status: 'READY' } }),
+      this.prisma.product.count({ where: { status: 'UPLOADED' } }),
+      this.prisma.site.count(),
+      this.prisma.uploadJob.count(),
+      this.prisma.uploadJob.count({ where: { status: 'PENDING' } }),
+      this.prisma.uploadJob.count({ where: { status: 'SUCCESS' } }),
+      this.prisma.uploadJob.count({ where: { status: 'FAILED' } }),
+      this.prisma.transaction.count(),
       this.prisma.transaction.aggregate({
         _sum: { amount: true },
         where: { type: 'DEBIT' },
       }),
+      this.prisma.transaction.aggregate({
+        _sum: { amount: true },
+        where: { type: 'CREDIT' },
+      }),
     ]);
-    const totalSpent = spent._sum.amount ?? 0;
-    return { users, spent: Math.abs(totalSpent) };
+
+    return {
+      users: {
+        total: users,
+        active: activeUsers,
+        banned: bannedUsers,
+      },
+      products: {
+        total: products,
+        ready: readyProducts,
+        uploaded: uploadedProducts,
+      },
+      sites: {
+        total: sites,
+      },
+      uploadJobs: {
+        total: uploadJobs,
+        pending: pendingJobs,
+        success: successJobs,
+        failed: failedJobs,
+      },
+      transactions: {
+        total: transactions,
+        spent: Math.abs(totalSpent._sum.amount ?? 0),
+        credited: Math.abs(totalCredit._sum.amount ?? 0),
+      },
+    };
   }
 
   async creditUser(params: {
