@@ -1,6 +1,8 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
+import { UserRole } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 type StatsRange = 'week' | 'month' | 'quarter' | 'year';
 
@@ -166,6 +168,260 @@ export class AdminService {
       topProducts,
       topCategories,
     };
+  }
+
+  async listUsers(params: { page?: number; limit?: number; search?: string; actorRole?: UserRole }) {
+    const page = params.page ?? 1;
+    const limit = params.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    let where: any = params.search
+      ? {
+          OR: [
+            { email: { contains: params.search, mode: 'insensitive' as const } },
+            { username: { contains: params.search, mode: 'insensitive' as const } },
+          ],
+        }
+      : {};
+
+    // Mod chỉ có thể xem USER, Admin có thể xem tất cả
+    if (params.actorRole === UserRole.MOD) {
+      where = {
+        ...where,
+        role: UserRole.USER,
+      };
+    }
+
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          role: true,
+          balance: true,
+          bannedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      users,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async createUser(params: {
+    email: string;
+    username: string;
+    password: string;
+    role?: UserRole;
+    actorRole?: UserRole;
+  }) {
+    const { email, username, password, role, actorRole } = params;
+
+    // Mod chỉ có thể tạo USER, Admin có thể tạo tất cả
+    if (actorRole === UserRole.MOD && role && role !== UserRole.USER) {
+      throw new ForbiddenException('Mod chỉ có thể tạo user với role USER');
+    }
+
+    // Check if email or username already exists
+    const existingUser = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ email }, { username }],
+      },
+    });
+
+    if (existingUser) {
+      throw new BadRequestException('Email hoặc username đã tồn tại');
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        username,
+        passwordHash,
+        role: role ?? UserRole.USER,
+      },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        balance: true,
+        bannedAt: true,
+        createdAt: true,
+      },
+    });
+
+    return user;
+  }
+
+  async updateUser(
+    userId: string,
+    params: {
+      email?: string;
+      username?: string;
+      password?: string;
+      role?: UserRole;
+      actorRole?: UserRole;
+    },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User không tồn tại');
+    }
+
+    // Mod chỉ có thể sửa USER, Admin có thể sửa tất cả
+    if (params.actorRole === UserRole.MOD) {
+      if (user.role !== UserRole.USER) {
+        throw new ForbiddenException('Mod chỉ có thể sửa user với role USER');
+      }
+      // Mod không thể thay đổi role thành MOD hoặc ADMIN
+      if (params.role && params.role !== UserRole.USER) {
+        throw new ForbiddenException('Mod không thể thay đổi role thành MOD hoặc ADMIN');
+      }
+    }
+
+    const updateData: any = {};
+
+    if (params.email && params.email !== user.email) {
+      const existing = await this.prisma.user.findUnique({
+        where: { email: params.email },
+      });
+      if (existing) {
+        throw new BadRequestException('Email đã tồn tại');
+      }
+      updateData.email = params.email;
+    }
+
+    if (params.username && params.username !== user.username) {
+      const existing = await this.prisma.user.findUnique({
+        where: { username: params.username },
+      });
+      if (existing) {
+        throw new BadRequestException('Username đã tồn tại');
+      }
+      updateData.username = params.username;
+    }
+
+    if (params.password) {
+      updateData.passwordHash = await bcrypt.hash(params.password, 10);
+    }
+
+    if (params.role !== undefined) {
+      updateData.role = params.role;
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        balance: true,
+        bannedAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async deleteUser(userId: string, actorRole?: UserRole) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User không tồn tại');
+    }
+
+    // Mod chỉ có thể xóa USER, Admin có thể xóa tất cả
+    if (actorRole === UserRole.MOD && user.role !== UserRole.USER) {
+      throw new ForbiddenException('Mod chỉ có thể xóa user với role USER');
+    }
+
+    await this.prisma.user.delete({ where: { id: userId } });
+    return { success: true };
+  }
+
+  async banUser(userId: string, actorRole?: UserRole) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User không tồn tại');
+    }
+
+    // Mod chỉ có thể ban USER, Admin có thể ban tất cả
+    if (actorRole === UserRole.MOD && user.role !== UserRole.USER) {
+      throw new ForbiddenException('Mod chỉ có thể ban user với role USER');
+    }
+
+    if (user.bannedAt) {
+      throw new BadRequestException('User đã bị ban');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { bannedAt: new Date() },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        balance: true,
+        bannedAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async unbanUser(userId: string, actorRole?: UserRole) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User không tồn tại');
+    }
+
+    // Mod chỉ có thể unban USER, Admin có thể unban tất cả
+    if (actorRole === UserRole.MOD && user.role !== UserRole.USER) {
+      throw new ForbiddenException('Mod chỉ có thể unban user với role USER');
+    }
+
+    if (!user.bannedAt) {
+      throw new BadRequestException('User chưa bị ban');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { bannedAt: null },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        balance: true,
+        bannedAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return updated;
   }
 
   private getRangeStart(range: StatsRange) {
