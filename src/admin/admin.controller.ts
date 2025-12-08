@@ -16,6 +16,7 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
+import { Audit } from '../audit-log/audit.decorator';
 
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -29,6 +30,7 @@ export class AdminController {
   }
 
   @Post('users/:id/credit')
+  @Audit('CREDIT_USER', 'User')
   creditUser(
     @Param('id') id: string,
     @Body() body: { amount: number; reference?: string },
@@ -80,6 +82,7 @@ export class AdminController {
   }
 
   @Post('users')
+  @Audit('CREATE_USER', 'User')
   createUser(
     @Body()
     body: {
@@ -97,6 +100,7 @@ export class AdminController {
   }
 
   @Patch('users/:id')
+  @Audit('UPDATE_USER', 'User')
   updateUser(
     @Param('id') id: string,
     @Body()
@@ -115,16 +119,19 @@ export class AdminController {
   }
 
   @Delete('users/:id')
+  @Audit('DELETE_USER', 'User')
   deleteUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.admin.deleteUser(id, req.user.role);
   }
 
   @Post('users/:id/ban')
+  @Audit('BAN_USER', 'User')
   banUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.admin.banUser(id, req.user.role);
   }
 
   @Post('users/:id/unban')
+  @Audit('UNBAN_USER', 'User')
   unbanUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.admin.unbanUser(id, req.user.role);
   }

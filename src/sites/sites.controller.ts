@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
+import { Audit } from '../audit-log/audit.decorator';
 
 @UseGuards(AuthGuard('jwt'))
 @Roles(UserRole.USER)
@@ -27,6 +28,7 @@ export class SitesController {
   }
 
   @Post()
+  @Audit('CREATE_SITE', 'Site')
   create(
     @Req() req: AuthenticatedRequest,
     @Body()
@@ -44,6 +46,7 @@ export class SitesController {
   }
 
   @Patch(':id')
+  @Audit('UPDATE_SITE', 'Site')
   update(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
@@ -58,6 +61,7 @@ export class SitesController {
   }
 
   @Delete(':id')
+  @Audit('DELETE_SITE', 'Site')
   remove(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.sites.remove(req.user.userId, id);
   }

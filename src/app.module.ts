@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -12,6 +13,8 @@ import { AdminModule } from './admin/admin.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UploadModule } from './upload/upload.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
+import { AuditInterceptor } from './audit-log/audit.interceptor';
 
 @Module({
   imports: [
@@ -32,8 +35,15 @@ import { ApiKeysModule } from './api-keys/api-keys.module';
     AdminModule,
     UploadModule,
     ApiKeysModule,
+    AuditLogModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
+    },
+  ],
 })
 export class AppModule {}

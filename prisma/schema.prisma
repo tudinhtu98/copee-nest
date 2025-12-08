@@ -147,6 +147,31 @@ model ApiKey {
   @@map("api_keys")
 }
 
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  userEmail   String   @map("user_email")
+  userRole    UserRole @map("user_role")
+  action      String   // e.g., "CREATE_SITE", "DELETE_PRODUCT", "UPDATE_USER"
+  resource    String   // e.g., "Site", "Product", "User"
+  resourceId  String?  @map("resource_id") // ID của resource bị thao tác
+  method      String   // HTTP method: GET, POST, PATCH, DELETE
+  endpoint    String   // API endpoint được gọi
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  requestBody Json?    @map("request_body") // Request payload (sensitive data filtered)
+  response    Json?    // Response data (optional)
+  status      Int      // HTTP status code
+  errorMessage String? @map("error_message")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
 
 enum UserRole {
   USER
