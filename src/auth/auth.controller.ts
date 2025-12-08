@@ -1,5 +1,7 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Patch, UseGuards, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { AuthGuard } from '@nestjs/passport';
+import type { AuthenticatedRequest } from './authenticated-request';
 
 @Controller('auth')
 export class AuthController {
@@ -25,5 +27,18 @@ export class AuthController {
   @Post('logout')
   logout(@Body() body: { refresh_token: string }) {
     return this.auth.logout(body.refresh_token);
+  }
+
+  @Patch('profile')
+  @UseGuards(AuthGuard('jwt'))
+  updateProfile(
+    @Req() req: AuthenticatedRequest,
+    @Body()
+    body: {
+      currentPassword?: string;
+      newPassword?: string;
+    },
+  ) {
+    return this.auth.updateProfile(req.user.userId, body);
   }
 }

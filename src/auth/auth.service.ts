@@ -41,6 +41,7 @@ export class AuthService {
     
     const payload = {
       sub: (user as any).id,
+      email: (user as any).email,
       role: (user as any).role,
       username: (user as any).username,
     };
@@ -91,6 +92,7 @@ export class AuthService {
     const user = tokenRecord.user as any;
     const payload = {
       sub: user.id,
+      email: user.email,
       role: user.role,
       username: user.username,
     };
@@ -130,5 +132,57 @@ export class AuthService {
       where: { token: refreshToken },
     });
     return { message: 'Đăng xuất thành công' };
+  }
+
+  async updateProfile(
+    userId: string,
+    params: {
+      currentPassword?: string;
+      newPassword?: string;
+    },
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new BadRequestException('User không tồn tại');
+    }
+
+    const updateData: any = {};
+
+    // Đổi mật khẩu
+    if (params.newPassword) {
+      if (!params.currentPassword) {
+        throw new BadRequestException('Vui lòng nhập mật khẩu hiện tại');
+      }
+
+      // Kiểm tra mật khẩu hiện tại
+      const isCurrentPasswordValid = await bcrypt.compare(
+        params.currentPassword,
+        (user as any).passwordHash || '',
+      );
+      if (!isCurrentPasswordValid) {
+        throw new BadRequestException('Mật khẩu hiện tại không đúng');
+      }
+
+      // Hash mật khẩu mới
+      updateData.passwordHash = await bcrypt.hash(params.newPassword, 10);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      throw new BadRequestException('Không có thông tin nào để cập nhật');
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        createdAt: true,
+      },
+    });
+
+    return updated;
   }
 }
