@@ -5,7 +5,7 @@ CREATE TYPE "public"."UserRole" AS ENUM ('USER', 'MOD', 'ADMIN');
 CREATE TYPE "public"."ProductStatus" AS ENUM ('DRAFT', 'READY', 'UPLOADED', 'FAILED');
 
 -- CreateTable
-CREATE TABLE "public"."User" (
+CREATE TABLE "public"."users" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "username" TEXT NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE "public"."User" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Site" (
+CREATE TABLE "public"."sites" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE "public"."Site" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Product" (
+CREATE TABLE "public"."products" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "sourceShop" TEXT NOT NULL,
@@ -53,7 +53,7 @@ CREATE TABLE "public"."Product" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."UploadJob" (
+CREATE TABLE "public"."upload_jobs" (
     "id" TEXT NOT NULL,
     "productId" TEXT NOT NULL,
     "siteId" TEXT NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE "public"."UploadJob" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."Transaction" (
+CREATE TABLE "public"."transactions" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "amount" INTEGER NOT NULL,
@@ -81,22 +81,22 @@ CREATE TABLE "public"."Transaction" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "public"."User"("email");
+CREATE UNIQUE INDEX "User_email_key" ON "public"."users"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "User_username_key" ON "public"."User"("username");
+CREATE UNIQUE INDEX "User_username_key" ON "public"."users"("username");
 
 -- AddForeignKey
-ALTER TABLE "public"."Site" ADD CONSTRAINT "Site_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."sites" ADD CONSTRAINT "Site_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Product" ADD CONSTRAINT "Product_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."products" ADD CONSTRAINT "Product_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."UploadJob" ADD CONSTRAINT "UploadJob_productId_fkey" FOREIGN KEY ("productId") REFERENCES "public"."Product"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."upload_jobs" ADD CONSTRAINT "UploadJob_productId_fkey" FOREIGN KEY ("productId") REFERENCES "public"."products"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."UploadJob" ADD CONSTRAINT "UploadJob_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "public"."Site"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."upload_jobs" ADD CONSTRAINT "UploadJob_siteId_fkey" FOREIGN KEY ("siteId") REFERENCES "public"."sites"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."Transaction" ADD CONSTRAINT "Transaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."transactions" ADD CONSTRAINT "Transaction_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
