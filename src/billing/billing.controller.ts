@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { BillingService } from './billing.service';
 import { Roles } from '../auth/roles.decorator';
@@ -17,11 +17,12 @@ export class BillingController {
   }
 
   @Post('credit')
+  @Roles(UserRole.ADMIN, UserRole.MOD)
   credit(
     @Req() req: AuthenticatedRequest,
     @Body() body: { amount: number; reference?: string },
   ) {
-    return this.billing.credit(req.user.userId, body.amount, body.reference);
+    throw new ForbiddenException('Endpoint này đã bị vô hiệu hóa. Vui lòng sử dụng /admin/users/:id/credit để nạp tiền.');
   }
 
   @Get('spending')
