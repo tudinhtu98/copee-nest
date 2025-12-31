@@ -2,9 +2,11 @@ import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
@@ -22,14 +24,55 @@ export class AuthService {
     username: string;
     password: string;
   }) {
-    const { email, username, password } = params;
-    const existed = await this.users.findByEmail(email);
-    if (existed) throw new BadRequestException('Email đã tồn tại');
-    const existedUsername = await this.users.findByUsername(username);
-    if (existedUsername) throw new BadRequestException('Username đã tồn tại');
-    const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.users.createUser({ email, username, passwordHash });
-    return user;
+    try {
+      const { email, username, password } = params;
+
+      // Validate input
+      if (!email || !username || !password) {
+        throw new BadRequestException('Email, username và password là bắt buộc');
+      }
+
+      if (password.length < 6) {
+        throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
+      }
+
+      // Check existing email
+      const existed = await this.users.findByEmail(email);
+      if (existed) throw new BadRequestException('Email đã tồn tại');
+
+      // Check existing username
+      const existedUsername = await this.users.findByUsername(username);
+      if (existedUsername) throw new BadRequestException('Username đã tồn tại');
+
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, 10);
+
+      // Create user
+      const user = await this.users.createUser({ email, username, passwordHash });
+      return user;
+    } catch (error) {
+      // Handle known exceptions
+      if (
+        error instanceof BadRequestException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
+
+      // Handle Prisma unique constraint violations
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2002') {
+          const field = (error.meta?.target as string[])?.[0] || 'trường';
+          throw new BadRequestException(`${field} đã tồn tại`);
+        }
+      }
+
+      // Log unexpected errors
+      console.error('Register error:', error);
+      throw new InternalServerErrorException(
+        'Đã xảy ra lỗi khi đăng ký. Vui lòng thử lại.',
+      );
+    }
   }
 
   async login(params: { email: string; password: string }) {
