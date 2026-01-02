@@ -177,6 +177,88 @@ export class AuthService {
     return { message: 'Đăng xuất thành công' };
   }
 
+  async googleAuth(params: {
+    email: string;
+    name: string;
+    googleId: string;
+    image?: string;
+  }) {
+    const { email, name, googleId, image } = params;
+
+    // Tìm user theo googleId hoặc email
+    let user = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ googleId }, { email }],
+      },
+    });
+
+    // Nếu chưa có user, tạo mới
+    if (!user) {
+      // Tạo username từ email (part before @)
+      let username = email.split('@')[0];
+
+      // Đảm bảo username là unique
+      const existingUser = await this.users.findByUsername(username);
+      if (existingUser) {
+        // Thêm random suffix nếu username đã tồn tại
+        username = `${username}_${crypto.randomBytes(4).toString('hex')}`;
+      }
+
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          username,
+          googleId,
+          name,
+          image,
+          passwordHash: null, // OAuth users don't have password
+        },
+      });
+    } else {
+      // Cập nhật googleId nếu user đã tồn tại nhưng chưa có googleId
+      if (!user.googleId) {
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { googleId, name, image },
+        });
+      } else {
+        // Cập nhật name và image
+        user = await this.prisma.user.update({
+          where: { id: user.id },
+          data: { name, image },
+        });
+      }
+    }
+
+    // Tạo tokens
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      username: user.username,
+    };
+
+    const accessToken = await this.jwt.signAsync(payload);
+
+    // Tạo refresh token
+    const refreshToken = crypto.randomBytes(64).toString('hex');
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // 30 ngày
+
+    await this.prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    return {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
+  }
+
   async updateProfile(
     userId: string,
     params: {

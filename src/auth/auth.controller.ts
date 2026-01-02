@@ -2,6 +2,7 @@ import { Body, Controller, Post, Patch, UseGuards, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import type { AuthenticatedRequest } from './authenticated-request';
+import { GoogleAuthDto } from './google-auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -27,6 +28,16 @@ export class AuthController {
   @Post('logout')
   logout(@Body() body: { refresh_token: string }) {
     return this.auth.logout(body.refresh_token);
+  }
+
+  @Post('google')
+  googleAuth(@Body() body: GoogleAuthDto) {
+    return this.auth.googleAuth({
+      email: body.email,
+      name: body.name,
+      googleId: body.googleId,
+      image: body.image,
+    });
   }
 
   @Patch('profile')
