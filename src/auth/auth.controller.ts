@@ -30,7 +30,7 @@ export class AuthController {
     return this.auth.logout(body.refresh_token);
   }
 
-  @Post('google')
+  @Post('google-oauth')
   googleAuth(@Body() body: GoogleAuthDto) {
     return this.auth.googleAuth({
       email: body.email,
