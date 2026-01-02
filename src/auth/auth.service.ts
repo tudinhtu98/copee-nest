@@ -198,10 +198,23 @@ export class AuthService {
       let username = email.split('@')[0];
 
       // Đảm bảo username là unique
-      const existingUser = await this.users.findByUsername(username);
+      let existingUser = await this.users.findByUsername(username);
       if (existingUser) {
-        // Thêm random suffix nếu username đã tồn tại
-        username = `${username}_${crypto.randomBytes(4).toString('hex')}`;
+        // Thêm random suffix 3 số nếu username đã tồn tại
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        while (existingUser && attempts < maxAttempts) {
+          const randomSuffix = Math.floor(100 + Math.random() * 900); // Random 3 số từ 100-999
+          username = `${email.split('@')[0]}${randomSuffix}`;
+          existingUser = await this.users.findByUsername(username);
+          attempts++;
+        }
+
+        // Nếu sau 10 lần vẫn trùng, dùng timestamp
+        if (existingUser) {
+          username = `${email.split('@')[0]}${Date.now() % 10000}`;
+        }
       }
 
       user = await this.prisma.user.create({
