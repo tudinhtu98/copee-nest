@@ -18,7 +18,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: ['https://app.copee.vn', 'http://localhost:3000'],
+    origin: ['https://app.copee.vn', 'https://api.copee.vn', 'http://localhost:3000'],
     credentials: false,
     allowedHeaders: ['Content-Type', 'Authorization'],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
