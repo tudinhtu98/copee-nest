@@ -52,4 +52,13 @@ export class AuthController {
   ) {
     return this.auth.updateProfile(req.user.userId, body);
   }
+
+  @Post('set-password')
+  @UseGuards(AuthGuard('jwt'))
+  setInitialPassword(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { password: string },
+  ) {
+    return this.auth.setInitialPassword(req.user.userId, body.password);
+  }
 }

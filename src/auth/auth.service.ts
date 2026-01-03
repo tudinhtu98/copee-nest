@@ -249,6 +249,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       username: user.username,
+      hasPassword: !!user.passwordHash, // Thêm flag để frontend biết user đã set password chưa
     };
 
     const accessToken = await this.jwt.signAsync(payload);
@@ -322,5 +323,31 @@ export class AuthService {
     });
 
     return updated;
+  }
+
+  async setInitialPassword(userId: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new BadRequestException('User không tồn tại');
+    }
+
+    // Chỉ cho phép set password nếu user chưa có password (OAuth users)
+    if (user.passwordHash) {
+      throw new BadRequestException('User đã có mật khẩu. Vui lòng sử dụng chức năng đổi mật khẩu.');
+    }
+
+    if (password.length < 6) {
+      throw new BadRequestException('Mật khẩu phải có ít nhất 6 ký tự');
+    }
+
+    // Hash và lưu password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { message: 'Đã thiết lập mật khẩu thành công' };
   }
 }
