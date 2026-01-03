@@ -343,11 +343,46 @@ export class AuthService {
     // Hash và lưu password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    await this.prisma.user.update({
+    const updatedUser = await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash },
     });
 
-    return { message: 'Đã thiết lập mật khẩu thành công' };
+    // Tạo token mới với hasPassword: true
+    const payload = {
+      sub: updatedUser.id,
+      email: updatedUser.email,
+      role: updatedUser.role,
+      username: updatedUser.username,
+      hasPassword: true, // Bây giờ user đã có password
+    };
+
+    const accessToken = this.jwt.sign(payload, {
+      expiresIn: '15m',
+    });
+
+    // Tạo refresh token mới
+    const refreshToken = this.jwt.sign(
+      { sub: updatedUser.id },
+      { expiresIn: '30d' },
+    );
+
+    // Lưu refresh token vào database
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: updatedUser.id,
+        token: refreshToken,
+        expiresAt,
+      },
+    });
+
+    return {
+      message: 'Đã thiết lập mật khẩu thành công',
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    };
   }
 }
