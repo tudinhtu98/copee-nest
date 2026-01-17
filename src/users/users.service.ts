@@ -14,15 +14,21 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { username } });
   }
 
-  createUser(params: {
+  async createUser(params: {
     email: string;
     username: string;
     passwordHash: string;
     role?: UserRole;
   }) {
     const { email, username, passwordHash, role } = params;
-    return this.prisma.user.create({
-      data: { email, username, passwordHash, role: role ?? 'USER' },
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        username,
+        passwordHash,
+        role: role ?? 'USER',
+        balance: 10000, // Initial balance for new users
+      },
       select: {
         id: true,
         email: true,
@@ -31,6 +37,18 @@ export class UsersService {
         createdAt: true,
       },
     });
+
+    // Create transaction record for initial balance
+    await this.prisma.transaction.create({
+      data: {
+        userId: user.id,
+        amount: 10000,
+        type: 'INITIAL_BALANCE',
+        description: 'Số dư khởi tạo cho tài khoản mới',
+      },
+    });
+
+    return user;
   }
 }
 

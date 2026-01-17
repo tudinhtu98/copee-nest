@@ -225,6 +225,17 @@ export class AuthService {
           name,
           image,
           passwordHash: null, // OAuth users don't have password
+          balance: 10000, // Initial balance for new users
+        },
+      });
+
+      // Create transaction record for initial balance
+      await this.prisma.transaction.create({
+        data: {
+          userId: user.id,
+          amount: 10000,
+          type: 'INITIAL_BALANCE',
+          description: 'Số dư khởi tạo cho tài khoản mới',
         },
       });
     } else {
