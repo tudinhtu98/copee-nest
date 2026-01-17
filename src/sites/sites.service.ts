@@ -13,7 +13,7 @@ export class SitesService {
     return this.prisma.site.findMany({ where: { userId } });
   }
 
-  create(
+  async create(
     userId: string,
     input: {
       name: string;
@@ -25,7 +25,96 @@ export class SitesService {
       shopeeAffiliateId?: string;
     },
   ) {
-    return this.prisma.site.create({ data: { userId, ...input } });
+    const { baseUrl, wooConsumerKey, wooConsumerSecret, wpUsername, wpApplicationPassword } = input;
+
+    // 1. Normalize baseUrl (remove trailing slash, convert to lowercase)
+    const normalizedUrl = baseUrl.trim().replace(/\/$/, '').toLowerCase();
+
+    // 2. Check if normalized baseUrl already exists for ANY user
+    const existingSite = await this.prisma.site.findFirst({
+      where: {
+        baseUrl: {
+          equals: normalizedUrl,
+          mode: 'insensitive', // Case-insensitive match
+        },
+      },
+      include: { user: { select: { email: true, username: true } } },
+    });
+
+    if (existingSite) {
+      throw new BadRequestException(
+        `URL này đã được đăng ký bởi user khác (${existingSite.user.username}). Mỗi WordPress site chỉ có thể liên kết với 1 tài khoản.`,
+      );
+    }
+
+    // 2. Test WooCommerce API connection
+    try {
+      const auth = Buffer.from(
+        `${wooConsumerKey}:${wooConsumerSecret}`,
+      ).toString('base64');
+      const endpoint = `${baseUrl.replace(/\/$/, '')}/wp-json/wc/v3/system_status`;
+
+      const response = await fetch(endpoint, {
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new BadRequestException(
+          `WooCommerce API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+        );
+      }
+    } catch (error: any) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Lỗi kết nối WooCommerce: ${error.message}`,
+      );
+    }
+
+    // 3. Test WordPress Application Password (if provided)
+    if (wpUsername && wpApplicationPassword) {
+      try {
+        const auth = Buffer.from(
+          `${wpUsername}:${wpApplicationPassword}`,
+        ).toString('base64');
+        const endpoint = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/users/me`;
+
+        const response = await fetch(endpoint, {
+          headers: {
+            Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new BadRequestException(
+            `WordPress API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+          );
+        }
+      } catch (error: any) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+        throw new BadRequestException(
+          `Lỗi kết nối WordPress: ${error.message}`,
+        );
+      }
+    }
+
+    // 4. All validation passed, create site with normalized URL
+    return this.prisma.site.create({
+      data: {
+        userId,
+        ...input,
+        baseUrl: normalizedUrl, // Save normalized URL
+      },
+    });
   }
 
   async update(
