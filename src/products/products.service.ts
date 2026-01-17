@@ -353,6 +353,7 @@ export class ProductsService {
       description?: string | null
       price?: number | null
       category?: string | null
+      sourceUrl?: string | null
     },
   ) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
@@ -387,6 +388,14 @@ export class ProductsService {
       updateData.category =
         trimmedCategory && trimmedCategory.length > 0 ? trimmedCategory : null;
       hasChanges = true;
+    }
+
+    if (data.sourceUrl !== undefined && typeof data.sourceUrl === 'string') {
+      const trimmedSourceUrl = data.sourceUrl.trim();
+      if (trimmedSourceUrl.length > 0) {
+        updateData.sourceUrl = trimmedSourceUrl;
+        hasChanges = true;
+      }
     }
 
     if (!hasChanges) {
