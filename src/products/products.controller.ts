@@ -122,6 +122,7 @@ export class ProductsController {
       price?: number;
       category?: string;
       sourceUrl?: string;
+      images?: string[];
     },
   ) {
     return this.products.updateProduct(req.user.userId, id, body);

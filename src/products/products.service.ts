@@ -354,6 +354,7 @@ export class ProductsService {
       price?: number | null
       category?: string | null
       sourceUrl?: string | null
+      images?: string[]
     },
   ) {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
@@ -396,6 +397,14 @@ export class ProductsService {
         updateData.sourceUrl = trimmedSourceUrl;
         hasChanges = true;
       }
+    }
+
+    if (Array.isArray(data.images)) {
+      const normalizedImages = data.images.filter(
+        (url) => typeof url === 'string' && url.trim().length > 0
+      );
+      updateData.images = normalizedImages.length > 0 ? normalizedImages : Prisma.JsonNull;
+      hasChanges = true;
     }
 
     if (!hasChanges) {
