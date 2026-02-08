@@ -368,15 +368,10 @@ export class AuthService {
       hasPassword: true, // Bây giờ user đã có password
     };
 
-    const accessToken = this.jwt.sign(payload, {
-      expiresIn: '15m',
-    });
+    const accessToken = await this.jwt.signAsync(payload);
 
     // Tạo refresh token mới
-    const refreshToken = this.jwt.sign(
-      { sub: updatedUser.id },
-      { expiresIn: '30d' },
-    );
+    const refreshToken = crypto.randomBytes(64).toString('hex');
 
     // Lưu refresh token vào database
     const expiresAt = new Date();

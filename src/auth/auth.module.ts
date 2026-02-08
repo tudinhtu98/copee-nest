@@ -19,7 +19,7 @@ import { ApiKeysModule } from '../api-keys/api-keys.module';
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET || 'dev-secret',
-      signOptions: { expiresIn: '15m' }, // Access token: 15 phút
+      signOptions: { expiresIn: '1h' }, // Access token: 1 giờ
     }),
   ],
   providers: [AuthService, JwtStrategy, RolesGuard, JwtOrApiKeyGuard],
