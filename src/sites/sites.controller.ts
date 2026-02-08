@@ -94,6 +94,7 @@ export class SitesController {
 
   @Post('test-credentials')
   testCredentials(
+    @Req() req: AuthenticatedRequest,
     @Body()
     body: {
       baseUrl: string;
@@ -101,7 +102,7 @@ export class SitesController {
       wpApplicationPassword: string;
     },
   ) {
-    return this.sites.testCredentials(body);
+    return this.sites.testCredentials(req.user.userId, body);
   }
 
   @Post(':siteId/test-connection')

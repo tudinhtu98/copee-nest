@@ -64,12 +64,11 @@ export class SitesService {
           mode: 'insensitive', // Case-insensitive match
         },
       },
-      include: { user: { select: { email: true, username: true } } },
     });
 
     if (existingSite) {
       throw new BadRequestException(
-        `URL này đã được đăng ký bởi user khác (${existingSite.user.username}). Mỗi WordPress site chỉ có thể liên kết với 1 tài khoản.`,
+        `URL này đã được đăng ký bởi tài khoản khác. Mỗi WordPress site chỉ có thể liên kết với 1 tài khoản.`,
       );
     }
 
@@ -383,12 +382,29 @@ export class SitesService {
     }
   }
 
-  async testCredentials(input: {
+  async testCredentials(userId: string, input: {
     baseUrl: string;
     wpUsername: string;
     wpApplicationPassword: string;
   }) {
     const { baseUrl, wpUsername, wpApplicationPassword } = input;
+
+    // Kiểm tra URL đã được user khác đăng ký chưa
+    const normalizedUrl = baseUrl.trim().replace(/\/$/, '').toLowerCase();
+    const existingSite = await this.prisma.site.findFirst({
+      where: {
+        baseUrl: { equals: normalizedUrl, mode: 'insensitive' },
+        NOT: { userId },
+      },
+    });
+
+    if (existingSite) {
+      return {
+        success: false,
+        message: 'URL này đã được đăng ký bởi tài khoản khác. Mỗi WordPress site chỉ có thể liên kết với 1 tài khoản.',
+      };
+    }
+
     try {
       const auth = Buffer.from(
         `${wpUsername}:${wpApplicationPassword}`,
