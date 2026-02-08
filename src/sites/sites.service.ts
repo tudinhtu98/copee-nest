@@ -5,6 +5,32 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+function parseWpError(rawText: string, statusCode: number): string {
+  try {
+    const json = JSON.parse(rawText);
+    const code = json.code || '';
+    const message = stripHtml(json.message || '');
+
+    const knownErrors: Record<string, string> = {
+      invalid_username: `Username không đúng. Lưu ý: dùng username WordPress (không phải email). Kiểm tra tại WordPress Admin → Users.`,
+      incorrect_password: `Application Password không đúng. Lưu ý: copy đúng password được tạo (bao gồm khoảng trắng), password chỉ hiện 1 lần khi tạo.`,
+      rest_forbidden: `Không có quyền truy cập. Đảm bảo user có quyền Administrator.`,
+      rest_cannot_read: `Không có quyền đọc dữ liệu. Kiểm tra lại quyền của user.`,
+    };
+
+    if (knownErrors[code]) {
+      return knownErrors[code];
+    }
+    return message || `Lỗi không xác định (code: ${code})`;
+  } catch {
+    return stripHtml(rawText).substring(0, 200) || `Lỗi HTTP ${statusCode}`;
+  }
+}
+
 @Injectable()
 export class SitesService {
   constructor(private readonly prisma: PrismaService) {}
@@ -64,7 +90,7 @@ export class SitesService {
       if (!response.ok) {
         const errorText = await response.text();
         throw new BadRequestException(
-          `WooCommerce API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+          `WooCommerce API lỗi (${response.status}): ${parseWpError(errorText, response.status)}`,
         );
       }
     } catch (error: any) {
@@ -94,7 +120,7 @@ export class SitesService {
         if (!response.ok) {
           const errorText = await response.text();
           throw new BadRequestException(
-            `WordPress API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+            `WordPress Application Password lỗi (${response.status}): ${parseWpError(errorText, response.status)}`,
           );
         }
       } catch (error: any) {
@@ -357,6 +383,45 @@ export class SitesService {
     }
   }
 
+  async testCredentials(input: {
+    baseUrl: string;
+    wpUsername: string;
+    wpApplicationPassword: string;
+  }) {
+    const { baseUrl, wpUsername, wpApplicationPassword } = input;
+    try {
+      const auth = Buffer.from(
+        `${wpUsername}:${wpApplicationPassword}`,
+      ).toString('base64');
+      const endpoint = `${baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/users/me`;
+
+      const response = await fetch(endpoint, {
+        headers: {
+          Authorization: `Basic ${auth}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const user = await response.json();
+        return {
+          success: true,
+          message: `Kết nối thành công! User: ${user.name || wpUsername}`,
+        };
+      }
+      const errorText = await response.text();
+      return {
+        success: false,
+        message: `Lỗi (${response.status}): ${parseWpError(errorText, response.status)}`,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        message: `Lỗi kết nối: ${error.message}`,
+      };
+    }
+  }
+
   async testConnection(userId: string, siteId: string) {
     const site = await this.prisma.site.findFirst({
       where: { id: siteId, userId },
@@ -398,7 +463,7 @@ export class SitesService {
           const errorText = await response.text();
           results.wooCommerce = {
             success: false,
-            message: `WooCommerce API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+            message: `WooCommerce API lỗi (${response.status}): ${parseWpError(errorText, response.status)}`,
           };
         }
       } catch (error: any) {
@@ -421,7 +486,7 @@ export class SitesService {
           `${site.wpUsername}:${site.wpApplicationPassword}`,
         ).toString('base64');
         const endpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/users/me`;
-        
+
         const response = await fetch(endpoint, {
           headers: {
             Authorization: `Basic ${auth}`,
@@ -438,7 +503,7 @@ export class SitesService {
           const errorText = await response.text();
           results.wordPress = {
             success: false,
-            message: `WordPress API lỗi (${response.status}): ${errorText.substring(0, 100)}`,
+            message: `WordPress API lỗi (${response.status}): ${parseWpError(errorText, response.status)}`,
           };
         }
       } catch (error: any) {

@@ -92,6 +92,18 @@ export class SitesController {
     return this.sites.createWooCommerceCategory(req.user.userId, siteId, body);
   }
 
+  @Post('test-credentials')
+  testCredentials(
+    @Body()
+    body: {
+      baseUrl: string;
+      wpUsername: string;
+      wpApplicationPassword: string;
+    },
+  ) {
+    return this.sites.testCredentials(body);
+  }
+
   @Post(':siteId/test-connection')
   testConnection(
     @Req() req: AuthenticatedRequest,
