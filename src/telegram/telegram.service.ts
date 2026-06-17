@@ -8,12 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Telegraf, Markup } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
-import {
-  loadTiers,
-  computeTotal,
-  formatPoints,
-  Tier,
-} from './telegram.tiers';
+import { loadTiers, formatPoints, Tier } from './telegram.tiers';
 
 /** Trạng thái hội thoại tạm thời theo từng chat của admin. */
 type Pending =
@@ -95,7 +90,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         'Bot nạp điểm Copee 👋\n\n' +
           `Chat id của bạn: ${ctx.from?.id}\n\n` +
           'Gửi username khách cần nạp (vd: nguyenvana hoặc @nguyenvana), ' +
-          'hoặc dùng: /napt nguyenvana',
+          'hoặc dùng: /napt nguyenvana\n\n' +
+          '📊 Xem báo cáo: /report',
       );
     });
 
@@ -172,6 +168,126 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.pending.delete(ctx.from!.id);
       return ctx.editMessageText('❌ Đã hủy giao dịch.');
     });
+
+    // Báo cáo: /report -> chọn kỳ ngày/tháng/năm
+    bot.command('report', (ctx) => {
+      if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
+      return ctx.reply('📊 Chọn kỳ báo cáo:', this.reportKeyboard());
+    });
+
+    bot.action(/^report:(day|month|year)$/, async (ctx) => {
+      if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
+      await ctx.answerCbQuery();
+      const period = ctx.match[1] as 'day' | 'month' | 'year';
+      const text = await this.buildReport(period);
+      try {
+        await ctx.editMessageText(text, this.reportKeyboard());
+      } catch {
+        // Bỏ qua lỗi "message is not modified" khi bấm lại cùng kỳ
+      }
+    });
+  }
+
+  private reportKeyboard() {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback('Hôm nay', 'report:day'),
+        Markup.button.callback('Tháng này', 'report:month'),
+        Markup.button.callback('Năm nay', 'report:year'),
+      ],
+    ]);
+  }
+
+  /** Mốc bắt đầu kỳ theo giờ Việt Nam (UTC+7), trả về thời điểm UTC tương ứng. */
+  private periodStartVN(period: 'day' | 'month' | 'year'): Date {
+    const offset = 7 * 60 * 60 * 1000;
+    const vn = new Date(Date.now() + offset);
+    const y = vn.getUTCFullYear();
+    const m = vn.getUTCMonth();
+    const d = vn.getUTCDate();
+    let startMs: number;
+    if (period === 'day') startMs = Date.UTC(y, m, d);
+    else if (period === 'month') startMs = Date.UTC(y, m, 1);
+    else startMs = Date.UTC(y, 0, 1);
+    return new Date(startMs - offset);
+  }
+
+  private formatVnDate(d: Date): string {
+    const vn = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+    const dd = String(vn.getUTCDate()).padStart(2, '0');
+    const mm = String(vn.getUTCMonth() + 1).padStart(2, '0');
+    return `${dd}/${mm}/${vn.getUTCFullYear()}`;
+  }
+
+  private async buildReport(period: 'day' | 'month' | 'year'): Promise<string> {
+    const start = this.periodStartVN(period);
+    const [credit, debit, newUsers, topCredit, topDebit] =
+      await this.prisma.$transaction([
+        this.prisma.transaction.aggregate({
+          _sum: { amount: true },
+          _count: true,
+          where: { type: 'CREDIT', createdAt: { gte: start } },
+        }),
+        this.prisma.transaction.aggregate({
+          _sum: { amount: true },
+          _count: true,
+          where: { type: 'DEBIT', createdAt: { gte: start } },
+        }),
+        this.prisma.user.count({ where: { createdAt: { gte: start } } }),
+        this.prisma.transaction.groupBy({
+          by: ['userId'],
+          where: { type: 'CREDIT', createdAt: { gte: start } },
+          _sum: { amount: true },
+          orderBy: { _sum: { amount: 'desc' } },
+          take: 5,
+        }),
+        this.prisma.transaction.groupBy({
+          by: ['userId'],
+          where: { type: 'DEBIT', createdAt: { gte: start } },
+          _sum: { amount: true },
+          orderBy: { _sum: { amount: 'asc' } }, // DEBIT âm => tiêu nhiều nhất xếp đầu
+          take: 5,
+        }),
+      ]);
+
+    // Lấy username cho các user xuất hiện trong bảng xếp hạng
+    const ids = [...new Set([...topCredit, ...topDebit].map((r) => r.userId))];
+    const users = ids.length
+      ? await this.prisma.user.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, username: true },
+        })
+      : [];
+    const nameOf = new Map(users.map((u) => [u.id, u.username]));
+
+    const label =
+      period === 'day' ? 'Hôm nay' : period === 'month' ? 'Tháng này' : 'Năm nay';
+    const credited = credit._sum.amount ?? 0;
+    const spent = Math.abs(debit._sum.amount ?? 0);
+
+    return (
+      `📊 Báo cáo — ${label}\n` +
+      `Từ ${this.formatVnDate(start)} (giờ VN)\n\n` +
+      `💰 Nạp: ${formatPoints(credited)} điểm (${credit._count} GD)\n` +
+      `🛒 Tiêu: ${formatPoints(spent)} điểm (${debit._count} GD)\n` +
+      `👥 User mới: ${newUsers}\n\n` +
+      `🏆 Top nạp:\n${this.renderTop(topCredit, nameOf)}\n\n` +
+      `🔥 Top tiêu:\n${this.renderTop(topDebit, nameOf)}`
+    );
+  }
+
+  private renderTop(
+    rows: Array<{ userId: string; _sum?: { amount?: number | null } | null }>,
+    nameOf: Map<string, string>,
+  ): string {
+    if (!rows.length) return '—';
+    return rows
+      .map((r, i) => {
+        const amt = Math.abs(r._sum?.amount ?? 0);
+        const name = nameOf.get(r.userId) ?? r.userId;
+        return `${i + 1}. ${name} — ${formatPoints(amt)}`;
+      })
+      .join('\n');
   }
 
   private async denyAndReport(ctx: any) {
