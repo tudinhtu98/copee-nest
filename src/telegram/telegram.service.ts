@@ -102,6 +102,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       return this.lookupAndOffer(ctx, arg);
     });
 
+    // Phải đăng ký TRƯỚC bot.on('text') vì handler text nuốt mọi lệnh "/..."
+    bot.command('report', (ctx) => {
+      if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
+      return ctx.reply('📊 Chọn kỳ báo cáo:', this.reportKeyboard());
+    });
+
     bot.on('text', (ctx) => {
       if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
       const text = ctx.message.text.trim();
@@ -169,12 +175,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       return ctx.editMessageText('❌ Đã hủy giao dịch.');
     });
 
-    // Báo cáo: /report -> chọn kỳ ngày/tháng/năm
-    bot.command('report', (ctx) => {
-      if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
-      return ctx.reply('📊 Chọn kỳ báo cáo:', this.reportKeyboard());
-    });
-
+    // Báo cáo: nút chọn kỳ ngày/tháng/năm (lệnh /report đăng ký ở trên)
     bot.action(/^report:(day|month|year)$/, async (ctx) => {
       if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
       await ctx.answerCbQuery();
