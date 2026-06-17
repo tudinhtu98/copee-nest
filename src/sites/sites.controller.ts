@@ -52,6 +52,10 @@ export class SitesController {
     @Param('id') id: string,
     @Body()
     body: {
+      name?: string;
+      baseUrl?: string;
+      wooConsumerKey?: string;
+      wooConsumerSecret?: string;
       wpUsername?: string;
       wpApplicationPassword?: string;
       shopeeAffiliateId?: string;

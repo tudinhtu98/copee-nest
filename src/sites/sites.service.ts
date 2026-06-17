@@ -146,6 +146,10 @@ export class SitesService {
     userId: string,
     id: string,
     input: {
+      name?: string;
+      baseUrl?: string;
+      wooConsumerKey?: string;
+      wooConsumerSecret?: string;
       wpUsername?: string;
       wpApplicationPassword?: string;
       shopeeAffiliateId?: string;
@@ -156,6 +160,21 @@ export class SitesService {
       throw new NotFoundException('Site không tồn tại');
     }
     const updateData: any = {};
+    if (input.name !== undefined) {
+      updateData.name = input.name;
+    }
+    if (input.baseUrl !== undefined) {
+      // Normalize baseUrl consistent with create()
+      updateData.baseUrl = input.baseUrl.trim().replace(/\/$/, '').toLowerCase();
+    }
+    // wooConsumerKey/Secret are required (non-nullable) columns, so only
+    // overwrite when a non-empty value is provided.
+    if (input.wooConsumerKey) {
+      updateData.wooConsumerKey = input.wooConsumerKey;
+    }
+    if (input.wooConsumerSecret) {
+      updateData.wooConsumerSecret = input.wooConsumerSecret;
+    }
     if (input.wpUsername !== undefined) {
       updateData.wpUsername = input.wpUsername || null;
     }
