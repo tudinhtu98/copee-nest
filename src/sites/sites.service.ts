@@ -172,11 +172,23 @@ export class SitesService {
   }
 
   async remove(userId: string, id: string) {
-    const result = await this.prisma.site.deleteMany({ where: { id, userId } });
-    if (result.count === 0) {
+    // Verify ownership before deleting
+    const site = await this.prisma.site.findFirst({ where: { id, userId } });
+    if (!site) {
       throw new NotFoundException('Site không tồn tại');
     }
-    return { removed: result.count };
+
+    // Delete related records first to satisfy foreign key constraints.
+    // upload_jobs.site_id has no ON DELETE CASCADE, so it must be removed
+    // explicitly. woocommerce_categories cascades automatically but we
+    // include it in the same transaction for atomicity.
+    await this.prisma.$transaction([
+      this.prisma.uploadJob.deleteMany({ where: { siteId: id } }),
+      this.prisma.wooCommerceCategory.deleteMany({ where: { siteId: id } }),
+      this.prisma.site.delete({ where: { id } }),
+    ]);
+
+    return { removed: 1 };
   }
 
 
