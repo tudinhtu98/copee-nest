@@ -9,7 +9,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as crypto from 'crypto';
+import { NotifyEvents } from '../telegram/telegram.events';
+import type { UserCreatedPayload } from '../telegram/telegram.events';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +20,7 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async register(params: {
@@ -49,6 +53,11 @@ export class AuthService {
 
       // Create user
       const user = await this.users.createUser({ email, username, passwordHash });
+      this.events.emit(NotifyEvents.UserCreated, {
+        username: user.username,
+        email: user.email,
+        source: 'password',
+      } as UserCreatedPayload);
       return user;
     } catch (error) {
       // Handle known exceptions
@@ -238,6 +247,12 @@ export class AuthService {
           description: 'Số dư khởi tạo cho tài khoản mới',
         },
       });
+
+      this.events.emit(NotifyEvents.UserCreated, {
+        username: user.username,
+        email: user.email,
+        source: 'google',
+      } as UserCreatedPayload);
     } else {
       // Cập nhật googleId nếu user đã tồn tại nhưng chưa có googleId
       if (!user.googleId) {

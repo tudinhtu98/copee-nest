@@ -5,10 +5,17 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { OnEvent } from '@nestjs/event-emitter';
 import { Telegraf, Markup } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { loadTiers, formatPoints, Tier } from './telegram.tiers';
+import { NotifyEvents } from './telegram.events';
+import type {
+  UserCreatedPayload,
+  SiteCreatedPayload,
+  DepositIntentPayload,
+} from './telegram.events';
 
 /** Trạng thái hội thoại tạm thời theo từng chat của admin. */
 type Pending =
@@ -70,6 +77,48 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.bot?.stop('SIGTERM');
+  }
+
+  // --- Gửi thông báo chủ động tới tất cả admin ---
+  async notify(text: string) {
+    if (!this.bot || this.allowedIds.size === 0) return;
+    for (const id of this.allowedIds) {
+      try {
+        await this.bot.telegram.sendMessage(id, text);
+      } catch (err) {
+        this.logger.warn(`Không gửi được thông báo tới ${id}: ${err}`);
+      }
+    }
+  }
+
+  @OnEvent(NotifyEvents.UserCreated)
+  async onUserCreated(p: UserCreatedPayload) {
+    await this.notify(
+      `🆕 User mới đăng ký\n` +
+        `Username: ${p.username}\n` +
+        `Email: ${p.email}\n` +
+        `Nguồn: ${p.source === 'google' ? 'Google' : 'Email/Mật khẩu'}`,
+    );
+  }
+
+  @OnEvent(NotifyEvents.SiteCreated)
+  async onSiteCreated(p: SiteCreatedPayload) {
+    await this.notify(
+      `🌐 Site mới được thêm\n` +
+        `Chủ: ${p.username}\n` +
+        `Tên: ${p.siteName}\n` +
+        `URL: ${p.baseUrl}`,
+    );
+  }
+
+  @OnEvent(NotifyEvents.DepositIntent)
+  async onDepositIntent(p: DepositIntentPayload) {
+    await this.notify(
+      `💵 Có người tạo mã QR nạp tiền\n` +
+        `Username: ${p.username}\n` +
+        `Số tiền: ${formatPoints(p.amount)}₫\n\n` +
+        `Kiểm tra chuyển khoản rồi nạp: /napt ${p.username}`,
+    );
   }
 
   // --- Quyền truy cập ---

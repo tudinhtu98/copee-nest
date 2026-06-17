@@ -11,16 +11,22 @@ import {
 } from '@nestjs/common';
 import { SitesService } from './sites.service';
 import { AuthGuard } from '@nestjs/passport';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { Audit } from '../audit-log/audit.decorator';
+import { NotifyEvents } from '../telegram/telegram.events';
+import type { SiteCreatedPayload } from '../telegram/telegram.events';
 
 @UseGuards(AuthGuard('jwt'))
 @Roles(UserRole.USER)
 @Controller('sites')
 export class SitesController {
-  constructor(private readonly sites: SitesService) {}
+  constructor(
+    private readonly sites: SitesService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   @Get()
   list(@Req() req: AuthenticatedRequest) {
@@ -29,7 +35,7 @@ export class SitesController {
 
   @Post()
   @Audit('CREATE_SITE', 'Site')
-  create(
+  async create(
     @Req() req: AuthenticatedRequest,
     @Body()
     body: {
@@ -42,7 +48,13 @@ export class SitesController {
       shopeeAffiliateId?: string;
     },
   ) {
-    return this.sites.create(req.user.userId, body);
+    const site = await this.sites.create(req.user.userId, body);
+    this.events.emit(NotifyEvents.SiteCreated, {
+      username: req.user.username ?? req.user.userId,
+      siteName: site.name,
+      baseUrl: site.baseUrl,
+    } as SiteCreatedPayload);
+    return site;
   }
 
   @Patch(':id')

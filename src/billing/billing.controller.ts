@@ -1,19 +1,38 @@
 import { Body, Controller, Get, Post, Query, Req, UseGuards, ForbiddenException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BillingService } from './billing.service';
 import { Roles } from '../auth/roles.decorator';
 import { UserRole } from '@prisma/client';
 import type { AuthenticatedRequest } from '../auth/authenticated-request';
+import { NotifyEvents } from '../telegram/telegram.events';
+import type { DepositIntentPayload } from '../telegram/telegram.events';
 
 @UseGuards(AuthGuard('jwt'))
 @Roles(UserRole.USER)
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly events: EventEmitter2,
+  ) {}
 
   @Get('balance')
   balance(@Req() req: AuthenticatedRequest) {
     return this.billing.getBalance(req.user.userId);
+  }
+
+  // Người dùng bấm "Tôi đã chuyển khoản" / tạo QR -> báo admin kiểm tra để nạp tay
+  @Post('deposit-intent')
+  depositIntent(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { amount: number },
+  ) {
+    this.events.emit(NotifyEvents.DepositIntent, {
+      username: req.user.username ?? req.user.userId,
+      amount: Number(body?.amount) || 0,
+    } as DepositIntentPayload);
+    return { ok: true };
   }
 
   @Post('credit')
