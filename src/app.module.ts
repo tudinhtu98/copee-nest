@@ -15,6 +15,7 @@ import { UploadModule } from './upload/upload.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AuditInterceptor } from './audit-log/audit.interceptor';
     UploadModule,
     ApiKeysModule,
     AuditLogModule,
+    TelegramModule,
   ],
   controllers: [AppController],
   providers: [
