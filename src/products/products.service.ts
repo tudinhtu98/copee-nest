@@ -273,14 +273,14 @@ export class ProductsService {
       site: { userId },
     }
     
-    // Exclude CANCELLED jobs
+    // Exclude CANCELLED jobs (already filtered by status: PENDING/FAILED above)
     if (jobIds && jobIds.length > 0) {
       where.id = { in: jobIds }
-      // If specific jobs selected, allow retry even if retryCount >= 3 (manual retry)
-    } else {
-      // If no specific jobs, only process jobs with retryCount < 3 (auto retry)
-      where.retryCount = { lt: 3 };
     }
+    // No retryCount filter: this endpoint is user-initiated ("Xử lý tất cả"),
+    // so FAILED jobs (which always have retryCount >= maxRetries) must be
+    // included and reset below. Filtering by retryCount < 3 would silently
+    // skip every FAILED job.
 
     const jobs = await this.prisma.uploadJob.findMany({
       where,
