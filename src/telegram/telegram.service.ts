@@ -215,18 +215,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   async onVideoReady(p: VideoReadyPayload) {
     if (!this.bot) return;
     try {
-      await this.bot.telegram.sendVideo(p.telegramId, p.videoUrl, {
-        caption: p.caption.slice(0, 1024),
-      });
+      // Gửi thẳng file mp4 từ server (không cần host public)
+      await this.bot.telegram.sendVideo(
+        p.telegramId,
+        { source: p.videoPath },
+        { caption: p.caption.slice(0, 1024) },
+      );
     } catch (err) {
-      this.logger.warn(`Gửi video thất bại, gửi link thay thế: ${err}`);
+      this.logger.warn(`Gửi video thất bại: ${err}`);
       try {
         await this.bot.telegram.sendMessage(
           p.telegramId,
-          `🎬 Video "${p.productTitle}" đã xong:\n${p.videoUrl}\n\n${p.caption}`,
+          `🎬 Video "${p.productTitle}" đã tạo xong nhưng gửi lỗi. Caption:\n\n${p.caption}`,
         );
       } catch (e) {
-        this.logger.error(`Không gửi được cả link video: ${e}`);
+        this.logger.error(`Không gửi được thông báo video: ${e}`);
       }
     }
   }

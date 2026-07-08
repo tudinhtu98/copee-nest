@@ -6,3 +6,6 @@ node_modules
 dist
 
 /generated/prisma
+
+# Video sản phẩm sinh ra (không commit)
+uploads

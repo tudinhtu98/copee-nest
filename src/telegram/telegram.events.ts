@@ -27,7 +27,7 @@ export interface DepositIntentPayload {
 
 export interface VideoReadyPayload {
   telegramId: string; // chat id để gửi video về
-  videoUrl: string;
+  videoPath: string; // đường dẫn file mp4 trên server
   caption: string;
   productTitle: string;
 }

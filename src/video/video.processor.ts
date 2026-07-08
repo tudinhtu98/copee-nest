@@ -3,10 +3,12 @@ import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { writeFile, mkdir } from 'node:fs/promises';
+import { join, isAbsolute } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { RenderService } from './render.service';
-import { buildCaption, toAffiliateLink } from './caption';
+import { toAffiliateLink, finalizeCaption } from './caption';
 import { NotifyEvents } from '../telegram/telegram.events';
 import type {
   VideoReadyPayload,
@@ -30,7 +32,13 @@ export class VideoProcessor extends WorkerHost {
   }
 
   private get cost(): number {
-    return parseInt(this.config.get<string>('VIDEO_COST') || '2000', 10);
+    return parseInt(this.config.get<string>('VIDEO_COST') || '5000', 10);
+  }
+
+  /** Thư mục lưu video (mặc định ./uploads/videos). */
+  private get videoDir(): string {
+    const d = this.config.get<string>('VIDEO_DIR') || 'uploads/videos';
+    return isAbsolute(d) ? d : join(process.cwd(), d);
   }
 
   async process(job: Job<VideoJobData>): Promise<any> {
@@ -51,40 +59,35 @@ export class VideoProcessor extends WorkerHost {
         data: { status: 'PROCESSING' },
       });
 
-      this.logger.log(`🎬 Render video job ${jobId}: ${product.title}`);
+      this.logger.log(`🎬 Tạo video job ${jobId}: ${product.title}`);
 
       const images = Array.isArray(product.images)
         ? (product.images as string[])
         : [];
 
-      // 1) Render video trên Creatomate
+      // 1) Gemini viết kịch bản + caption, 2) Veo sinh video (có nhạc native)
       const result = await this.render.renderProductVideo({
         title: product.title,
+        category: product.category,
         price: product.price,
         originalPrice: product.originalPrice,
         images,
       });
 
-      // 2) Caption + link affiliate (lấy aff_id từ site đầu tiên có cấu hình)
+      // 3) Ghép link affiliate vào caption
       const site = await this.prisma.site.findFirst({
         where: { userId, shopeeAffiliateId: { not: null } },
         select: { shopeeAffiliateId: true },
       });
-      const affLink = toAffiliateLink(
-        product.sourceUrl,
-        site?.shopeeAffiliateId,
-      );
-      const caption = buildCaption(
-        {
-          title: product.title,
-          price: product.price,
-          originalPrice: product.originalPrice,
-          category: product.category,
-        },
-        affLink,
-      );
+      const affLink = toAffiliateLink(product.sourceUrl, site?.shopeeAffiliateId);
+      const caption = finalizeCaption(result.caption, affLink);
 
-      // 3) Trừ tiền (chỉ khi render xong)
+      // 4) Lưu video ra file
+      await mkdir(this.videoDir, { recursive: true });
+      const videoPath = join(this.videoDir, `${jobId}.mp4`);
+      await writeFile(videoPath, result.videoBuffer);
+
+      // 5) Trừ tiền (chỉ khi thành công)
       await this.billing.debit(
         userId,
         this.cost,
@@ -92,12 +95,12 @@ export class VideoProcessor extends WorkerHost {
         `Tạo video: ${product.title}`.slice(0, 180),
       );
 
-      // 4) Lưu kết quả
+      // 6) Lưu kết quả
       await this.prisma.videoJob.update({
         where: { id: jobId },
         data: {
           status: 'DONE',
-          videoUrl: result.url,
+          videoUrl: videoPath,
           durationSec: result.durationSec,
           caption,
           cost: this.cost,
@@ -105,18 +108,18 @@ export class VideoProcessor extends WorkerHost {
         },
       });
 
-      // 5) Bắn event để bot gửi video về cho user
+      // 7) Bắn event -> bot gửi video về
       if (telegramId) {
         this.events.emit(NotifyEvents.VideoReady, {
           telegramId,
-          videoUrl: result.url,
+          videoPath,
           caption,
           productTitle: product.title,
         } as VideoReadyPayload);
       }
 
-      this.logger.log(`✅ Video job ${jobId} xong: ${result.url}`);
-      return { success: true, url: result.url };
+      this.logger.log(`✅ Video job ${jobId} xong: ${videoPath}`);
+      return { success: true, videoPath };
     } catch (e: any) {
       this.logger.error(`❌ Video job ${jobId} lỗi: ${e.message}`);
 
@@ -141,7 +144,7 @@ export class VideoProcessor extends WorkerHost {
         } as VideoFailedPayload);
       }
 
-      throw e; // để BullMQ retry theo attempts
+      throw e;
     }
   }
 }

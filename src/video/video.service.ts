@@ -25,7 +25,7 @@ export class VideoService {
 
   /** Số điểm trừ mỗi video (mặc định 2000, cấu hình qua VIDEO_COST). */
   get cost(): number {
-    return parseInt(this.config.get<string>('VIDEO_COST') || '2000', 10);
+    return parseInt(this.config.get<string>('VIDEO_COST') || '5000', 10);
   }
 
   /** Bóc shopid + itemid từ link Shopee để match sản phẩm cho chắc. */
