@@ -17,6 +17,7 @@ import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
 import { TelegramModule } from './telegram/telegram.module';
+import { VideoModule } from './video/video.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { TelegramModule } from './telegram/telegram.module';
     ApiKeysModule,
     AuditLogModule,
     TelegramModule,
+    VideoModule,
   ],
   controllers: [AppController],
   providers: [

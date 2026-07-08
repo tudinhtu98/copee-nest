@@ -6,15 +6,19 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
+import { randomBytes } from 'node:crypto';
 import { Telegraf, Markup } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
+import { VideoService } from '../video/video.service';
 import { loadTiers, formatPoints, Tier } from './telegram.tiers';
 import { NotifyEvents } from './telegram.events';
 import type {
   UserCreatedPayload,
   SiteCreatedPayload,
   DepositIntentPayload,
+  VideoReadyPayload,
+  VideoFailedPayload,
 } from './telegram.events';
 
 /** Trạng thái hội thoại tạm thời theo từng chat của admin. */
@@ -37,12 +41,30 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private tiers: Tier[] = [];
   private allowedIds = new Set<number>();
   private pending = new Map<number, Pending>();
+  /** Mã liên kết Telegram tạm thời: code -> { userId, hết hạn }. */
+  private linkCodes = new Map<string, { userId: string; exp: number }>();
 
   constructor(
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
+    private readonly video: VideoService,
   ) {}
+
+  /**
+   * Tạo mã liên kết (gọi từ web, user đã đăng nhập). User nhập mã này vào bot
+   * bằng lệnh /lienket <mã> để gắn Telegram vào tài khoản copee.
+   */
+  generateLinkCode(userId: string): { code: string; expiresInSec: number } {
+    // Dọn mã hết hạn
+    const now = Date.now();
+    for (const [c, v] of this.linkCodes) if (v.exp < now) this.linkCodes.delete(c);
+
+    const code = randomBytes(4).toString('hex').toUpperCase(); // 8 ký tự
+    const ttl = 10 * 60 * 1000; // 10 phút
+    this.linkCodes.set(code, { userId, exp: now + ttl });
+    return { code, expiresInSec: ttl / 1000 };
+  }
 
   onModuleInit() {
     const token = this.config.get<string>('TELEGRAM_BOT_TOKEN');
@@ -121,6 +143,107 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  // ─── Liên kết tài khoản + tạo video (mở cho user thường) ───
+
+  private async handleLink(ctx: any) {
+    const code = (ctx.message?.text || '')
+      .replace(/^\/lienket(@\w+)?\s*/i, '')
+      .trim()
+      .toUpperCase();
+    if (!code) {
+      return ctx.reply(
+        'Cú pháp: /lienket <mã>\n\n' +
+          'Lấy mã liên kết trong phần Cài đặt trên web copee, rồi gửi vào đây.',
+      );
+    }
+    const entry = this.linkCodes.get(code);
+    if (!entry || entry.exp < Date.now()) {
+      this.linkCodes.delete(code);
+      return ctx.reply('❌ Mã không hợp lệ hoặc đã hết hạn. Lấy mã mới trên web nhé.');
+    }
+
+    const telegramId = String(ctx.from.id);
+    // Gỡ liên kết cũ nếu chat id này đang gắn tài khoản khác (telegramId là unique)
+    await this.prisma.user.updateMany({
+      where: { telegramId },
+      data: { telegramId: null },
+    });
+    const user = await this.prisma.user.update({
+      where: { id: entry.userId },
+      data: { telegramId },
+      select: { username: true, balance: true },
+    });
+    this.linkCodes.delete(code);
+
+    return ctx.reply(
+      `✅ Đã liên kết Telegram với tài khoản "${user.username}".\n` +
+        `Số dư: ${formatPoints(user.balance)} điểm\n\n` +
+        '🎬 Giờ gửi link sản phẩm Shopee (đã copy vào copee) để tạo video!',
+    );
+  }
+
+  private async handleVideoRequest(ctx: any) {
+    const telegramId = String(ctx.from.id);
+    const user = await this.prisma.user.findUnique({
+      where: { telegramId },
+      select: { id: true },
+    });
+    if (!user) {
+      return ctx.reply(
+        '🔗 Bạn chưa liên kết tài khoản.\n' +
+          'Lấy mã trên web copee rồi gửi: /lienket <mã>',
+      );
+    }
+
+    const match = (ctx.message?.text || '').match(/https?:\/\/\S+/);
+    const url = match ? match[0] : '';
+    if (!url) return ctx.reply('Không đọc được link. Gửi lại link sản phẩm Shopee nhé.');
+
+    try {
+      await ctx.reply('⏳ Đang tạo video... (khoảng 30 giây, mình sẽ gửi lại khi xong)');
+      const job = await this.video.createFromUrl(user.id, url);
+      return ctx.reply(
+        `✅ Đã nhận! Đang render video (phí ${formatPoints(this.video.cost)} điểm khi xong).\n` +
+          `Mã job: ${job.id}`,
+      );
+    } catch (e: any) {
+      return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);
+    }
+  }
+
+  @OnEvent(NotifyEvents.VideoReady)
+  async onVideoReady(p: VideoReadyPayload) {
+    if (!this.bot) return;
+    try {
+      await this.bot.telegram.sendVideo(p.telegramId, p.videoUrl, {
+        caption: p.caption.slice(0, 1024),
+      });
+    } catch (err) {
+      this.logger.warn(`Gửi video thất bại, gửi link thay thế: ${err}`);
+      try {
+        await this.bot.telegram.sendMessage(
+          p.telegramId,
+          `🎬 Video "${p.productTitle}" đã xong:\n${p.videoUrl}\n\n${p.caption}`,
+        );
+      } catch (e) {
+        this.logger.error(`Không gửi được cả link video: ${e}`);
+      }
+    }
+  }
+
+  @OnEvent(NotifyEvents.VideoFailed)
+  async onVideoFailed(p: VideoFailedPayload) {
+    if (!this.bot) return;
+    try {
+      await this.bot.telegram.sendMessage(
+        p.telegramId,
+        `❌ Tạo video "${p.productTitle}" thất bại: ${p.reason}\nĐiểm chưa bị trừ. Bạn thử lại sau nhé.`,
+      );
+    } catch (err) {
+      this.logger.warn(`Không gửi được thông báo lỗi video: ${err}`);
+    }
+  }
+
   // --- Quyền truy cập ---
   private isAllowed(id?: number): boolean {
     return !!id && this.allowedIds.has(id);
@@ -134,13 +257,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   // --- Đăng ký handler ---
   private registerHandlers(bot: Telegraf) {
     bot.start((ctx) => {
-      if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
+      const base =
+        'Copee Bot 👋\n\n' +
+        '🎬 Tạo video sản phẩm từ link Shopee:\n' +
+        '1. Lấy mã liên kết trong Cài đặt trên web copee\n' +
+        '2. Gửi: /lienket <mã>\n' +
+        '3. Gửi link sản phẩm Shopee (đã copy vào copee) — nhận lại video!\n';
+      if (!this.isAllowed(ctx.from?.id)) return ctx.reply(base);
       return ctx.reply(
-        'Bot nạp điểm Copee 👋\n\n' +
-          `Chat id của bạn: ${ctx.from?.id}\n\n` +
-          'Gửi username khách cần nạp (vd: nguyenvana hoặc @nguyenvana), ' +
-          'hoặc dùng: /napt nguyenvana\n\n' +
-          '📊 Xem báo cáo: /report',
+        base +
+          `\n— Khu vực admin —\n` +
+          `Chat id: ${ctx.from?.id}\n` +
+          'Nạp điểm: /napt <username>\n' +
+          '📊 Báo cáo: /report',
       );
     });
 
@@ -156,6 +285,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
       return ctx.reply('📊 Chọn kỳ báo cáo:', this.reportKeyboard());
     });
+
+    // Liên kết tài khoản copee với Telegram (mở cho MỌI người, không cần là admin)
+    bot.command('lienket', (ctx) => this.handleLink(ctx));
+
+    // Bắt link Shopee -> tạo video. Đăng ký TRƯỚC bot.on('text') để nuốt link
+    // trước khi handler admin coi nó là username.
+    bot.hears(/https?:\/\/\S*shopee\S*/i, (ctx) => this.handleVideoRequest(ctx));
 
     bot.on('text', (ctx) => {
       if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);

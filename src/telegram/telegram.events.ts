@@ -4,6 +4,8 @@ export const NotifyEvents = {
   UserCreated: 'notify.user.created',
   SiteCreated: 'notify.site.created',
   DepositIntent: 'notify.deposit.intent',
+  VideoReady: 'notify.video.ready',
+  VideoFailed: 'notify.video.failed',
 } as const;
 
 export interface UserCreatedPayload {
@@ -21,4 +23,17 @@ export interface SiteCreatedPayload {
 export interface DepositIntentPayload {
   username: string;
   amount: number;
+}
+
+export interface VideoReadyPayload {
+  telegramId: string; // chat id để gửi video về
+  videoUrl: string;
+  caption: string;
+  productTitle: string;
+}
+
+export interface VideoFailedPayload {
+  telegramId: string;
+  productTitle: string;
+  reason: string;
 }
