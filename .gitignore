@@ -9,3 +9,4 @@ dist
 
 # Video sản phẩm sinh ra (không commit)
 uploads
+.DS_Store
