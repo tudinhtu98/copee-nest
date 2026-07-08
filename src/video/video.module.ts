@@ -6,6 +6,8 @@ import { VideoProcessor } from './video.processor';
 import { RenderService } from './render.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { BillingModule } from '../billing/billing.module';
+import { ApiKeysModule } from '../api-keys/api-keys.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { BillingModule } from '../billing/billing.module';
     }),
     PrismaModule,
     BillingModule,
+    ApiKeysModule,
+    AuthModule,
   ],
   controllers: [VideoController],
   providers: [VideoService, VideoProcessor, RenderService],
