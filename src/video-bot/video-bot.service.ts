@@ -76,7 +76,7 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
   private readonly helpText =
     '🎬 Copee Video Bot — các lệnh:\n\n' +
     '/lienket <mã> — liên kết tài khoản copee (lấy mã ở Cài đặt trên web)\n' +
-    '/sanpham [số] — xem sản phẩm đã copy gần nhất (mặc định 10, vd /sanpham 20)\n' +
+    '/sanpham [số] — xem sản phẩm đã copy gần nhất (mặc định 10, tối đa 50, vd /sanpham 30)\n' +
     '/tim <từ khoá> — tìm sản phẩm theo tên (vd /tim giày)\n' +
     '/help — xem hướng dẫn này\n\n' +
     '➡️ Cách tạo video: dùng /sanpham hoặc /tim rồi BẤM NÚT sản phẩm — hoặc ' +

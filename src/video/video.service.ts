@@ -124,7 +124,7 @@ export class VideoService {
     return this.prisma.product.findMany({
       where: { userId },
       orderBy: { updatedAt: 'desc' },
-      take: Math.min(Math.max(limit, 1), 20),
+      take: Math.min(Math.max(limit, 1), 50),
       select: { id: true, title: true, price: true },
     });
   }
@@ -140,7 +140,7 @@ export class VideoService {
        ORDER BY updated_at DESC LIMIT $3`,
       userId,
       term,
-      Math.min(Math.max(limit, 1), 20),
+      Math.min(Math.max(limit, 1), 50),
     );
   }
 
