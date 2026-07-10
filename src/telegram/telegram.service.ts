@@ -71,9 +71,24 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     this.registerHandlers(this.bot);
     this.bot
       .launch()
-      .then(() => this.logger.log('Bot Telegram đã khởi động.'))
+      .then(() => {
+        this.logger.log('Bot Telegram đã khởi động.');
+        this.bot?.telegram
+          .setMyCommands([
+            { command: 'napt', description: 'Nạp điểm cho user' },
+            { command: 'report', description: 'Báo cáo doanh thu' },
+            { command: 'help', description: 'Xem các lệnh' },
+          ])
+          .catch(() => undefined);
+      })
       .catch((err) => this.logger.error('Không khởi động được bot', err));
   }
+
+  private readonly helpText =
+    'Copee Admin Bot — các lệnh:\n\n' +
+    '/napt <username> — nạp điểm cho user (hoặc gửi thẳng username)\n' +
+    '/report — báo cáo nạp/tiêu theo ngày/tháng/năm\n' +
+    '/help — xem hướng dẫn này';
 
   onModuleDestroy() {
     this.bot?.stop('SIGTERM');
@@ -154,6 +169,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     bot.command('report', (ctx) => {
       if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
       return ctx.reply('📊 Chọn kỳ báo cáo:', this.reportKeyboard());
+    });
+
+    bot.command('help', (ctx) => {
+      if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
+      return ctx.reply(this.helpText);
     });
 
     bot.on('text', (ctx) => {
