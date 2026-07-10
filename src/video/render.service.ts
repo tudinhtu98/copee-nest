@@ -18,7 +18,8 @@ export interface RenderResult {
 }
 
 const GBASE = 'https://generativelanguage.googleapis.com/v1beta';
-const DURATION = 8; // Veo tối đa 8s/clip ở 1080p
+const VEO_DURATION = 8; // Veo tối đa 8s/clip ở 1080p
+const OMNI_DURATION = 10; // Omni ~10s, 720p
 
 /**
  * Sinh video quảng cáo sản phẩm bằng Gemini + Veo:
@@ -44,6 +45,13 @@ export class RenderService {
   }
   private get veoModel(): string {
     return this.config.get<string>('VEO_MODEL') || 'veo-3.1-lite-generate-preview';
+  }
+  private get omniModel(): string {
+    return this.config.get<string>('OMNI_MODEL') || 'gemini-omni-flash-preview';
+  }
+  /** Engine tạo video: 'omni' (quay thật hơn, 720p) hoặc 'veo' (Full HD 1080p). */
+  private get engine(): string {
+    return (this.config.get<string>('VIDEO_ENGINE') || 'omni').toLowerCase();
   }
   private headers() {
     return { 'x-goog-api-key': this.key(), 'Content-Type': 'application/json' };
@@ -118,8 +126,62 @@ Trả JSON đúng schema:
     return { data: buf.toString('base64'), mime };
   }
 
+  /** Tạo video từ ảnh + prompt, chọn engine theo cấu hình (omni | veo). */
+  async generateVideo(imageUrl: string, prompt: string): Promise<Buffer> {
+    return this.engine === 'veo'
+      ? this.generateVideoVeo(imageUrl, prompt)
+      : this.generateVideoOmni(imageUrl, prompt);
+  }
+
+  /**
+   * Gemini Omni Flash (Interactions API) — image-to-video, ĐỒNG BỘ (không poll).
+   * Chân thực hơn Veo, 720p ~10s, có nhạc native. Trả Buffer mp4.
+   */
+  async generateVideoOmni(imageUrl: string, prompt: string): Promise<Buffer> {
+    const img = await this.fetchImageBase64(imageUrl);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+    let res: Response;
+    try {
+      res = await fetch(`${GBASE}/interactions`, {
+        method: 'POST',
+        headers: this.headers(),
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: this.omniModel,
+          input: [
+            { type: 'image', data: img.data, mime_type: img.mime },
+            { type: 'text', text: prompt },
+          ],
+        }),
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    const j: any = await res.json();
+    if (!res.ok) {
+      throw new Error(`Omni lỗi ${res.status}: ${JSON.stringify(j).slice(0, 400)}`);
+    }
+    if (j.status && j.status !== 'completed') {
+      throw new Error(`Omni chưa hoàn tất: ${j.status}`);
+    }
+    let data: string | undefined;
+    for (const step of j.steps || []) {
+      for (const c of step.content || []) {
+        if ((c.mime_type || '').includes('video') && c.data) {
+          data = c.data;
+          break;
+        }
+      }
+      if (data) break;
+    }
+    if (!data) throw new Error('Omni không trả về video');
+    this.logger.log(`Omni (${this.omniModel}) tạo video xong`);
+    return Buffer.from(data, 'base64');
+  }
+
   /** Veo 3.1 tạo video 8s 1080p từ ảnh sản phẩm. Trả Buffer mp4 (đã có nhạc native). */
-  async generateVideo(imageUrl: string, veoPrompt: string): Promise<Buffer> {
+  async generateVideoVeo(imageUrl: string, veoPrompt: string): Promise<Buffer> {
     const key = this.key();
     const img = await this.fetchImageBase64(imageUrl);
 
@@ -135,7 +197,7 @@ Trả JSON đúng schema:
               image: { bytesBase64Encoded: img.data, mimeType: img.mime },
             },
           ],
-          parameters: { aspectRatio: '9:16', resolution: '1080p', durationSeconds: DURATION },
+          parameters: { aspectRatio: '9:16', resolution: '1080p', durationSeconds: VEO_DURATION },
         }),
       },
     );
@@ -177,6 +239,7 @@ Trả JSON đúng schema:
 
     const { veoPrompt, caption } = await this.generateScript({ ...p, images });
     const videoBuffer = await this.generateVideo(images[0], veoPrompt);
-    return { videoBuffer, caption, veoPrompt, durationSec: DURATION };
+    const durationSec = this.engine === 'veo' ? VEO_DURATION : OMNI_DURATION;
+    return { videoBuffer, caption, veoPrompt, durationSec };
   }
 }
