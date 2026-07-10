@@ -57,9 +57,27 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
     this.registerHandlers(this.bot);
     this.bot
       .launch()
-      .then(() => this.logger.log('Bot tạo video đã khởi động.'))
+      .then(() => {
+        this.logger.log('Bot tạo video đã khởi động.');
+        // Menu lệnh hiện khi user bấm nút "/"
+        this.bot?.telegram
+          .setMyCommands([
+            { command: 'start', description: 'Bắt đầu / hướng dẫn' },
+            { command: 'lienket', description: 'Liên kết tài khoản copee' },
+            { command: 'help', description: 'Xem các lệnh' },
+          ])
+          .catch(() => undefined);
+      })
       .catch((err) => this.logger.error('Không khởi động được bot video', err));
   }
+
+  private readonly helpText =
+    '🎬 Copee Video Bot — các lệnh:\n\n' +
+    '/lienket <mã> — liên kết tài khoản copee (lấy mã ở Cài đặt trên web)\n' +
+    '/help — xem hướng dẫn này\n' +
+    '/start — bắt đầu\n\n' +
+    '➡️ Sau khi liên kết, chỉ cần GỬI LINK sản phẩm Shopee (đã copy vào copee) ' +
+    'là bot tự tạo video quảng cáo + caption gửi lại cho bạn.';
 
   onModuleDestroy() {
     this.bot?.stop('SIGTERM');
@@ -76,6 +94,7 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
       ),
     );
 
+    bot.command('help', (ctx) => ctx.reply(this.helpText));
     bot.command('lienket', (ctx) => this.handleLink(ctx));
     bot.hears(/https?:\/\/\S*shopee\S*/i, (ctx) => this.handleVideoRequest(ctx));
 
