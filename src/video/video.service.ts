@@ -119,6 +119,31 @@ export class VideoService {
     return job;
   }
 
+  /** N sản phẩm đã copy gần nhất (dùng cho bot: chọn để tạo video). */
+  recentProducts(userId: string, limit = 10) {
+    return this.prisma.product.findMany({
+      where: { userId },
+      orderBy: { updatedAt: 'desc' },
+      take: Math.min(Math.max(limit, 1), 20),
+      select: { id: true, title: true, price: true },
+    });
+  }
+
+  /** Tìm sản phẩm theo tên (không phân biệt dấu tiếng Việt). */
+  searchProducts(userId: string, q: string, limit = 10) {
+    const term = `%${q.trim()}%`;
+    return this.prisma.$queryRawUnsafe<
+      Array<{ id: string; title: string; price: number | null }>
+    >(
+      `SELECT id, title, price FROM products
+       WHERE user_id = $1 AND unaccent(title) ILIKE unaccent($2)
+       ORDER BY updated_at DESC LIMIT $3`,
+      userId,
+      term,
+      Math.min(Math.max(limit, 1), 20),
+    );
+  }
+
   async list(
     userId: string,
     options?: { page?: number; limit?: number; status?: string },

@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { randomBytes } from 'node:crypto';
-import { Telegraf } from 'telegraf';
+import { Telegraf, Markup } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { VideoService } from '../video/video.service';
 import { formatPoints } from '../telegram/telegram.tiers';
@@ -64,6 +64,8 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
           .setMyCommands([
             { command: 'start', description: 'Bắt đầu / hướng dẫn' },
             { command: 'lienket', description: 'Liên kết tài khoản copee' },
+            { command: 'sanpham', description: 'Sản phẩm gần nhất (vd /sanpham 10)' },
+            { command: 'tim', description: 'Tìm sản phẩm (vd /tim giày)' },
             { command: 'help', description: 'Xem các lệnh' },
           ])
           .catch(() => undefined);
@@ -74,10 +76,11 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
   private readonly helpText =
     '🎬 Copee Video Bot — các lệnh:\n\n' +
     '/lienket <mã> — liên kết tài khoản copee (lấy mã ở Cài đặt trên web)\n' +
-    '/help — xem hướng dẫn này\n' +
-    '/start — bắt đầu\n\n' +
-    '➡️ Sau khi liên kết, chỉ cần GỬI LINK sản phẩm Shopee (đã copy vào copee) ' +
-    'là bot tự tạo video quảng cáo + caption gửi lại cho bạn.';
+    '/sanpham [số] — xem sản phẩm đã copy gần nhất (mặc định 10, vd /sanpham 20)\n' +
+    '/tim <từ khoá> — tìm sản phẩm theo tên (vd /tim giày)\n' +
+    '/help — xem hướng dẫn này\n\n' +
+    '➡️ Cách tạo video: dùng /sanpham hoặc /tim rồi BẤM NÚT sản phẩm — hoặc ' +
+    'GỬI THẲNG LINK Shopee (đã copy vào copee). Bot tự tạo video + caption gửi lại.';
 
   onModuleDestroy() {
     this.bot?.stop('SIGTERM');
@@ -96,15 +99,22 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
 
     bot.command('help', (ctx) => ctx.reply(this.helpText));
     bot.command('lienket', (ctx) => this.handleLink(ctx));
+    bot.command('sanpham', (ctx) => this.handleRecent(ctx));
+    bot.command('tim', (ctx) => this.handleSearch(ctx));
     bot.hears(/https?:\/\/\S*shopee\S*/i, (ctx) => this.handleVideoRequest(ctx));
+
+    // Bấm nút chọn sản phẩm -> tạo video
+    bot.action(/^mkvid:(.+)$/, (ctx) => this.handlePickProduct(ctx));
 
     // Text khác: hướng dẫn
     bot.on('text', (ctx) => {
       const t = ctx.message.text.trim();
       if (t.startsWith('/')) return;
       return ctx.reply(
-        'Gửi mình LINK sản phẩm Shopee (đã copy vào copee) để tạo video.\n' +
-          'Chưa liên kết? Gửi: /lienket <mã> (lấy mã ở Cài đặt trên web).',
+        'Gửi LINK sản phẩm Shopee (đã copy vào copee) để tạo video, hoặc:\n' +
+          '• /sanpham — chọn từ sản phẩm gần nhất\n' +
+          '• /tim <từ khoá> — tìm sản phẩm\n' +
+          'Chưa liên kết? /lienket <mã> (lấy ở Cài đặt trên web).',
       );
     });
   }
@@ -165,6 +175,79 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
       const job = await this.video.createFromUrl(user.id, url);
       return ctx.reply(
         `✅ Đã nhận! Đang tạo video (phí ${formatPoints(this.video.cost)} điểm khi xong).\nMã job: ${job.id}`,
+      );
+    } catch (e: any) {
+      return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);
+    }
+  }
+
+  private vnd(n?: number | null): string {
+    return n ? n.toLocaleString('vi-VN') + 'đ' : '—';
+  }
+
+  /** Lấy userId copee từ chat Telegram, hoặc reply nhắc liên kết & trả null. */
+  private async requireUserId(ctx: any): Promise<string | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { telegramId: String(ctx.from.id) },
+      select: { id: true },
+    });
+    if (!user) {
+      await ctx.reply(
+        '🔗 Bạn chưa liên kết tài khoản.\nLấy mã trên web copee rồi gửi: /lienket <mã>',
+      );
+      return null;
+    }
+    return user.id;
+  }
+
+  /** /sanpham [n] — n sản phẩm gần nhất (mặc định 10, tối đa 20). */
+  private async handleRecent(ctx: any) {
+    const userId = await this.requireUserId(ctx);
+    if (!userId) return;
+    const arg = (ctx.message?.text || '').replace(/^\/sanpham(@\w+)?\s*/i, '').trim();
+    const n = arg ? parseInt(arg, 10) : 10;
+    const products = await this.video.recentProducts(userId, Number.isFinite(n) ? n : 10);
+    return this.sendProductList(ctx, products, `🕒 ${products.length} sản phẩm gần nhất`);
+  }
+
+  /** /tim <từ khoá> — tìm sản phẩm theo tên. */
+  private async handleSearch(ctx: any) {
+    const userId = await this.requireUserId(ctx);
+    if (!userId) return;
+    const q = (ctx.message?.text || '').replace(/^\/tim(@\w+)?\s*/i, '').trim();
+    if (!q) return ctx.reply('Cú pháp: /tim <từ khoá>\nVí dụ: /tim giày');
+    const products = await this.video.searchProducts(userId, q, 15);
+    return this.sendProductList(ctx, products, `🔎 Kết quả cho "${q}" (${products.length})`);
+  }
+
+  /** Hiện danh sách sản phẩm kèm nút bấm chọn để tạo video. */
+  private async sendProductList(
+    ctx: any,
+    products: Array<{ id: string; title: string; price: number | null }>,
+    header: string,
+  ) {
+    if (!products.length) {
+      return ctx.reply(
+        'Không tìm thấy sản phẩm nào. Hãy dùng extension copy sản phẩm Shopee vào copee trước nhé.',
+      );
+    }
+    const rows = products.map((p) => {
+      const title = p.title.length > 30 ? p.title.slice(0, 30) + '…' : p.title;
+      return [Markup.button.callback(`🎬 ${title} — ${this.vnd(p.price)}`, `mkvid:${p.id}`)];
+    });
+    return ctx.reply(header + '\n\nBấm để tạo video:', Markup.inlineKeyboard(rows));
+  }
+
+  /** Bấm nút chọn 1 sản phẩm -> tạo video. */
+  private async handlePickProduct(ctx: any) {
+    await ctx.answerCbQuery().catch(() => undefined);
+    const productId = ctx.match?.[1];
+    const userId = await this.requireUserId(ctx);
+    if (!userId || !productId) return;
+    try {
+      const job = await this.video.createFromProduct(userId, productId);
+      return ctx.reply(
+        `⏳ Đang tạo video (phí ${formatPoints(this.video.cost)} điểm khi xong).\nMã job: ${job.id}\nMình sẽ gửi lại khi hoàn tất.`,
       );
     } catch (e: any) {
       return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);
