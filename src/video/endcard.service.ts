@@ -127,30 +127,48 @@ export class EndcardService {
       ctx.closePath();
     };
 
+    const MAXW = W - 90; // lề an toàn 2 bên, tránh tràn khung
+    // Giảm cỡ chữ tới khi vừa bề ngang maxW; đặt luôn ctx.font. Trả về cỡ đã chọn.
+    const fit = (
+      text: string,
+      family: string,
+      maxSize: number,
+      minSize: number,
+      maxW = MAXW,
+    ): number => {
+      let s = maxSize;
+      ctx.font = `${s}px ${family}`;
+      while (ctx.measureText(text).width > maxW && s > minSize) {
+        s -= 2;
+        ctx.font = `${s}px ${family}`;
+      }
+      return s;
+    };
+
     // pill trên
-    ctx.font = '34px BVP-XB';
     const pill = 'DEAL HOT HÔM NAY';
-    const pw = ctx.measureText(pill).width + 70;
+    fit(pill, 'BVP-XB', 34, 22, W - 220);
+    const pw = Math.min(ctx.measureText(pill).width + 70, W - 60);
     ctx.fillStyle = '#ff7a00'; round((W - pw) / 2, 70, pw, 74, 37); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(pill, W / 2, 120);
 
-    // tiêu đề (thu nhỏ nếu dài)
-    let tf = 96;
-    ctx.font = `${tf}px BVP-XB`;
-    while (ctx.measureText(data.title).width > W - 80 && tf > 46) { tf -= 4; ctx.font = `${tf}px BVP-XB`; }
-    ctx.fillStyle = '#fff'; ctx.fillText(data.title, W / 2, 260);
+    // tiêu đề
+    fit(data.title, 'BVP-XB', 92, 38);
+    ctx.fillStyle = '#fff'; ctx.fillText(data.title, W / 2, 258);
 
-    // features
-    ctx.fillStyle = '#ff9d2e'; ctx.font = '44px BVP-B';
-    ctx.fillText(data.features, W / 2, 340);
+    // 3 điểm bán hàng
+    fit(data.features, 'BVP-B', 44, 24);
+    ctx.fillStyle = '#ff9d2e'; ctx.fillText(data.features, W / 2, 340);
 
     // giá
-    ctx.fillStyle = '#ffd400'; ctx.font = '120px BVP-XB';
-    ctx.fillText(this.vnd(data.price), W / 2, H - 340);
+    fit(this.vnd(data.price), 'BVP-XB', 120, 56);
+    ctx.fillStyle = '#ffd400'; ctx.fillText(this.vnd(data.price), W / 2, H - 340);
+
+    // giá gốc gạch ngang
     if (data.originalPrice && data.price && data.originalPrice > data.price) {
-      ctx.fillStyle = '#bfbfbf'; ctx.font = '46px BVP-B';
       const og = 'Giá gốc ' + this.vnd(data.originalPrice);
-      ctx.fillText(og, W / 2, H - 250);
+      fit(og, 'BVP-B', 46, 26);
+      ctx.fillStyle = '#bfbfbf'; ctx.fillText(og, W / 2, H - 250);
       const ow = ctx.measureText(og).width;
       ctx.strokeStyle = '#bfbfbf'; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo((W - ow) / 2, H - 265); ctx.lineTo((W + ow) / 2, H - 265); ctx.stroke();
@@ -158,8 +176,8 @@ export class EndcardService {
 
     // CTA
     const cta = 'BẤM LINK MUA NGAY';
-    ctx.font = '52px BVP-XB';
-    const cw = Math.max(ctx.measureText(cta).width + 120, 720);
+    fit(cta, 'BVP-XB', 52, 32, W - 200);
+    const cw = Math.min(Math.max(ctx.measureText(cta).width + 120, 720), W - 40);
     ctx.fillStyle = '#ff7a00'; round((W - cw) / 2, H - 190, cw, 120, 60); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.fillText(cta, W / 2, H - 112);
 
