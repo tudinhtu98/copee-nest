@@ -15,6 +15,8 @@ export interface RenderResult {
   caption: string; // caption Gemini (chưa gắn link affiliate)
   veoPrompt: string;
   durationSec: number;
+  endcardTitle: string; // tên ngắn hiện trên end-card
+  endcardFeatures: string; // 3 điểm bán hàng "A • B • C"
 }
 
 const GBASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -62,9 +64,12 @@ export class RenderService {
   }
 
   /** Gemini viết prompt Veo (photorealistic, nhấn mạnh sản phẩm) + caption FB affiliate. */
-  async generateScript(
-    p: VideoProductInput,
-  ): Promise<{ veoPrompt: string; caption: string }> {
+  async generateScript(p: VideoProductInput): Promise<{
+    veoPrompt: string;
+    caption: string;
+    endcardTitle: string;
+    endcardFeatures: string;
+  }> {
     const prompt = `Bạn là đạo diễn quảng cáo sản phẩm chuyên nghiệp. Video này ĐĂNG FACEBOOK, gắn LINK AFFILIATE để bán kiếm hoa hồng — hình ảnh phải CHÂN THỰC NHƯ QUAY THẬT và LÀM NỔI BẬT SẢN PHẨM để người xem muốn mua ngay.
 Sản phẩm: ${p.title}${p.category ? ` (loại: ${p.category})` : ''}, giá ${this.vnd(p.price)}${p.originalPrice ? ` (gốc ${this.vnd(p.originalPrice)})` : ''}.
 
@@ -77,7 +82,9 @@ YÊU CẦU BẮT BUỘC đưa vào veo_prompt:
 Trả JSON đúng schema:
 {
   "veo_prompt": "prompt tiếng Anh chi tiết như trên",
-  "post_caption": "caption tiếng Việt để đăng Facebook: hook giật tít + lợi ích + giá + kêu gọi bấm link mua + 5-7 hashtag. KHÔNG tự chèn link (hệ thống gắn sau)."
+  "post_caption": "caption tiếng Việt để đăng Facebook: hook giật tít + lợi ích + giá + kêu gọi bấm link mua + 5-7 hashtag. KHÔNG tự chèn link (hệ thống gắn sau).",
+  "endcard_title": "tên sản phẩm ngắn gọn để hiện trên thumbnail cuối video (tối đa ~25 ký tự, vd 'adidas ADIZERO SL')",
+  "endcard_features": "đúng 3 điểm bán hàng ngắn, IN HOA, phân tách bằng ' • ' (vd 'SIÊU NHẸ • ÊM ÁI • CHÍNH HÃNG')"
 }`;
 
     const res = await fetch(
@@ -107,6 +114,8 @@ Trả JSON đúng schema:
     return {
       veoPrompt: parsed.veo_prompt,
       caption: parsed.post_caption || p.title,
+      endcardTitle: parsed.endcard_title || p.title.slice(0, 30),
+      endcardFeatures: parsed.endcard_features || 'CHÍNH HÃNG • GIÁ TỐT • GIAO NHANH',
     };
   }
 
@@ -237,9 +246,16 @@ Trả JSON đúng schema:
     );
     if (images.length === 0) throw new Error('Sản phẩm không có ảnh để tạo video');
 
-    const { veoPrompt, caption } = await this.generateScript({ ...p, images });
-    const videoBuffer = await this.generateVideo(images[0], veoPrompt);
+    const script = await this.generateScript({ ...p, images });
+    const videoBuffer = await this.generateVideo(images[0], script.veoPrompt);
     const durationSec = this.engine === 'veo' ? VEO_DURATION : OMNI_DURATION;
-    return { videoBuffer, caption, veoPrompt, durationSec };
+    return {
+      videoBuffer,
+      caption: script.caption,
+      veoPrompt: script.veoPrompt,
+      durationSec,
+      endcardTitle: script.endcardTitle,
+      endcardFeatures: script.endcardFeatures,
+    };
   }
 }

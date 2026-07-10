@@ -8,6 +8,8 @@ import { join, isAbsolute } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { RenderService } from './render.service';
+import { EndcardService } from './endcard.service';
+import { appendImageToVideo } from './ffmpeg.util';
 import { toAffiliateLink, finalizeCaption } from './caption';
 import { NotifyEvents } from '../telegram/telegram.events';
 import type {
@@ -25,10 +27,19 @@ export class VideoProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
     private readonly render: RenderService,
+    private readonly endcard: EndcardService,
     private readonly config: ConfigService,
     private readonly events: EventEmitter2,
   ) {
     super();
+  }
+
+  /** Có ghép end-card (thumbnail cuối video) không (mặc định có). */
+  private get endcardEnabled(): boolean {
+    return (this.config.get<string>('VIDEO_ENDCARD') || 'true').toLowerCase() !== 'false';
+  }
+  private get endcardSeconds(): number {
+    return parseInt(this.config.get<string>('VIDEO_ENDCARD_SEC') || '3', 10);
   }
 
   private get cost(): number {
@@ -74,7 +85,28 @@ export class VideoProcessor extends WorkerHost {
         images,
       });
 
-      // 3) Ghép link affiliate vào caption
+      // 3) Ghép end-card (thumbnail cuối video) — chữ tiếng Việt chuẩn
+      let finalBuffer = result.videoBuffer;
+      if (this.endcardEnabled && images.length > 0) {
+        try {
+          const cardPng = await this.endcard.build(images[0], {
+            title: result.endcardTitle,
+            features: result.endcardFeatures,
+            price: product.price,
+            originalPrice: product.originalPrice,
+          });
+          finalBuffer = await appendImageToVideo(
+            result.videoBuffer,
+            cardPng,
+            this.endcardSeconds,
+          );
+          this.logger.log(`🖼️ Đã ghép end-card ${this.endcardSeconds}s vào cuối video`);
+        } catch (e: any) {
+          this.logger.warn(`Ghép end-card lỗi (giữ video gốc): ${e.message}`);
+        }
+      }
+
+      // 4) Ghép link affiliate vào caption
       const site = await this.prisma.site.findFirst({
         where: { userId, shopeeAffiliateId: { not: null } },
         select: { shopeeAffiliateId: true },
@@ -82,10 +114,10 @@ export class VideoProcessor extends WorkerHost {
       const affLink = toAffiliateLink(product.sourceUrl, site?.shopeeAffiliateId);
       const caption = finalizeCaption(result.caption, affLink);
 
-      // 4) Lưu video ra file
+      // 5) Lưu video ra file
       await mkdir(this.videoDir, { recursive: true });
       const videoPath = join(this.videoDir, `${jobId}.mp4`);
-      await writeFile(videoPath, result.videoBuffer);
+      await writeFile(videoPath, finalBuffer);
 
       // 5) Trừ tiền (chỉ khi thành công)
       await this.billing.debit(
