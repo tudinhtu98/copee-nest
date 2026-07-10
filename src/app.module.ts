@@ -18,6 +18,7 @@ import { AuditLogModule } from './audit-log/audit-log.module';
 import { AuditInterceptor } from './audit-log/audit.interceptor';
 import { TelegramModule } from './telegram/telegram.module';
 import { VideoModule } from './video/video.module';
+import { VideoBotModule } from './video-bot/video-bot.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { VideoModule } from './video/video.module';
     AuditLogModule,
     TelegramModule,
     VideoModule,
+    VideoBotModule,
   ],
   controllers: [AppController],
   providers: [
