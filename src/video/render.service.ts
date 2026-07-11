@@ -61,25 +61,24 @@ export class RenderService {
     return (n ?? 0).toLocaleString('vi-VN') + 'đ';
   }
 
-  /** Gemini viết prompt Omni/Veo (photorealistic, chữ tiếng Anh cuối video) + caption FB affiliate. */
+  /**
+   * Gemini chỉ trả các THÀNH PHẦN kịch bản (cảnh + tên EN + CTA + caption);
+   * còn prompt gửi Omni được GHÉP THEO TEMPLATE CHUẨN trong code để chỉ thị
+   * "chữ cuối video" luôn mạnh, rõ, không bị chìm/bỏ qua.
+   */
   async generateScript(p: VideoProductInput): Promise<{
     veoPrompt: string;
     caption: string;
   }> {
-    const prompt = `Bạn là đạo diễn quảng cáo sản phẩm chuyên nghiệp. Video này ĐĂNG FACEBOOK, gắn LINK AFFILIATE để bán kiếm hoa hồng — hình ảnh phải CHÂN THỰC NHƯ QUAY THẬT và LÀM NỔI BẬT SẢN PHẨM để người xem muốn mua ngay.
+    const prompt = `Bạn là đạo diễn quảng cáo sản phẩm. Video dọc 9:16 ~8s, đăng Facebook gắn LINK AFFILIATE, quay-thật, nổi bật sản phẩm để kích thích mua.
 Sản phẩm: ${p.title}${p.category ? ` (loại: ${p.category})` : ''}, giá ${this.vnd(p.price)}${p.originalPrice ? ` (gốc ${this.vnd(p.originalPrice)})` : ''}.
 
-Viết 1 prompt DUY NHẤT cho AI video (Omni) tạo video dọc 9:16 ~8-10 giây, image-to-video TỪ ảnh sản phẩm, nhiều cảnh NHẤN MẠNH SẢN PHẨM (hero shot, cận cảnh chi tiết/chất liệu, dùng trong đời thực), cảm giác cao cấp, kích thích mua.
-YÊU CẦU BẮT BUỘC đưa vào veo_prompt:
-- "photorealistic, shot on a real camera, live-action product commercial, NOT animation or CGI, realistic lighting, textures and depth of field"
-- Camera động điện ảnh; nhạc nền upbeat.
-- KHÔNG chữ trong phần đầu/giữa video.
-- Ở KHOẢNG 2-3 GIÂY CUỐI: hiển thị on-screen marketing text bằng TIẾNG ANH, chính tả chuẩn, gồm: tiêu đề IN HOA đậm là TÊN SẢN PHẨM bằng tiếng Anh (dịch/rút gọn tên sản phẩm sang tiếng Anh, vd 'ADIDAS ADIZERO SL - BLACK'), và ngay bên dưới một dòng nhỏ 'Available now - Link in bio' đặt trên một thanh nền tối. Nêu rõ trong prompt là chữ phải rõ nét, đúng chính tả.
-- Giữ đúng sản phẩm trong ảnh (màu sắc, thiết kế, logo).
-Trả JSON đúng schema:
+CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống tự ghép):
 {
-  "veo_prompt": "prompt tiếng Anh chi tiết như trên (bao gồm phần chữ cuối video)",
-  "post_caption": "caption tiếng Việt để đăng Facebook: hook giật tít + lợi ích + giá + kêu gọi bấm link mua + 5-7 hashtag. KHÔNG tự chèn link (hệ thống gắn sau)."
+  "scene": "Mô tả cảnh quay bằng TIẾNG ANH cho AI video image-to-video, VERTICAL 9:16 portrait: cinematic, photorealistic, live-action product commercial (NOT animation/CGI), dynamic camera, realistic lighting, upbeat music. BẮT BUỘC ghi rõ: keep the product's EXACT colors, materials, logo and design identical to the reference image, do not recolor or restyle the product. No on-screen text during this part.",
+  "end_title": "TÊN SẢN PHẨM bằng TIẾNG ANH, IN HOA, ngắn gọn (thêm màu nếu có), ví dụ 'ADIDAS ADIZERO SL - BLACK'",
+  "end_cta": "câu kêu gọi ngắn bằng tiếng Anh; mặc định 'Available now - Link in bio'",
+  "post_caption": "caption TIẾNG VIỆT đăng Facebook: hook giật tít + lợi ích + giá + kêu gọi bấm link mua + 5-7 hashtag. KHÔNG tự chèn link."
 }`;
 
     const res = await fetch(
@@ -105,9 +104,25 @@ Trả JSON đúng schema:
     } catch {
       throw new Error(`Gemini trả về không phải JSON: ${text.slice(0, 200)}`);
     }
-    if (!parsed.veo_prompt) throw new Error('Gemini thiếu veo_prompt');
+
+    const scene: string =
+      parsed.scene ||
+      'Cinematic photorealistic live-action product commercial, dynamic camera, realistic lighting, upbeat music. Keep the product exactly as in the reference image.';
+    const endTitle: string = (parsed.end_title || p.title).toString().toUpperCase().slice(0, 40);
+    const endCta: string = parsed.end_cta || 'Available now - Link in bio';
+
+    // Ghép prompt CHUẨN — ép khung dọc 9:16 + chỉ thị chữ cuối đặt riêng, mạnh.
+    const veoPrompt =
+      `VERTICAL 9:16 portrait video (aspect ratio 9:16, 720x1280, taller than wide). ` +
+      `${scene}\n\n` +
+      `IMPORTANT ON-SCREEN TEXT (this is required): In the final 3 seconds of the video, ` +
+      `overlay a bold animated title card centered on screen. ` +
+      `Top line — large, bold, UPPERCASE, white, sans-serif, with a subtle shadow — reads exactly: "${endTitle}". ` +
+      `Second line — smaller white text on a solid dark rounded bar, directly below the title — reads exactly: "${endCta}". ` +
+      `The text must be sharp, high-contrast, perfectly legible and spelled EXACTLY as written in quotes. Do not add any other text.`;
+
     return {
-      veoPrompt: parsed.veo_prompt,
+      veoPrompt,
       caption: parsed.post_caption || p.title,
     };
   }
@@ -141,29 +156,43 @@ Trả JSON đúng schema:
    */
   async generateVideoOmni(imageUrl: string, prompt: string): Promise<Buffer> {
     const img = await this.fetchImageBase64(imageUrl);
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
-    let res: Response;
-    try {
-      res = await fetch(`${GBASE}/interactions`, {
-        method: 'POST',
-        headers: this.headers(),
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: this.omniModel,
-          input: [
-            { type: 'image', data: img.data, mime_type: img.mime },
-            { type: 'text', text: prompt },
-          ],
-        }),
-      });
-    } finally {
-      clearTimeout(timer);
+    const body = JSON.stringify({
+      model: this.omniModel,
+      input: [
+        { type: 'image', data: img.data, mime_type: img.mime },
+        { type: 'text', text: prompt },
+      ],
+    });
+
+    // Omni preview thi thoảng trả 5xx tạm thời -> retry tối đa 3 lần.
+    let j: any;
+    let lastErr = '';
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+      let res: Response;
+      try {
+        res = await fetch(`${GBASE}/interactions`, {
+          method: 'POST',
+          headers: this.headers(),
+          signal: controller.signal,
+          body,
+        });
+      } finally {
+        clearTimeout(timer);
+      }
+      j = await res.json();
+      if (res.ok) break;
+      lastErr = `${res.status}: ${JSON.stringify(j).slice(0, 300)}`;
+      // 5xx = tạm thời -> thử lại; 4xx (quota, invalid) -> ném ngay
+      if (res.status >= 500 && attempt < 3) {
+        this.logger.warn(`Omni ${res.status} (lần ${attempt}), thử lại...`);
+        await new Promise((r) => setTimeout(r, 4000 * attempt));
+        continue;
+      }
+      throw new Error(`Omni lỗi ${lastErr}`);
     }
-    const j: any = await res.json();
-    if (!res.ok) {
-      throw new Error(`Omni lỗi ${res.status}: ${JSON.stringify(j).slice(0, 400)}`);
-    }
+
     if (j.status && j.status !== 'completed') {
       throw new Error(`Omni chưa hoàn tất: ${j.status}`);
     }
