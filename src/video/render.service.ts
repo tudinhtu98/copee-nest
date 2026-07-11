@@ -139,7 +139,14 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
     });
     if (!r.ok) throw new Error(`Tải ảnh sản phẩm lỗi ${r.status}`);
     const buf = Buffer.from(await r.arrayBuffer());
-    const mime = (r.headers.get('content-type') || 'image/jpeg').split(';')[0];
+    // Chuẩn hoá mime: nhiều CDN trả 'image/jpg' (không chuẩn) -> Omni/Veo từ chối.
+    let mime = (r.headers.get('content-type') || 'image/jpeg')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    if (mime === 'image/jpg') mime = 'image/jpeg';
+    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif', 'image/gif'];
+    if (!allowed.includes(mime)) mime = 'image/jpeg';
     return { data: buf.toString('base64'), mime };
   }
 
