@@ -19,6 +19,7 @@ import { AuditInterceptor } from './audit-log/audit.interceptor';
 import { TelegramModule } from './telegram/telegram.module';
 import { VideoModule } from './video/video.module';
 import { VideoBotModule } from './video-bot/video-bot.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { VideoBotModule } from './video-bot/video-bot.module';
     TelegramModule,
     VideoModule,
     VideoBotModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [

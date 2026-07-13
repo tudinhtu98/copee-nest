@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SettingsService } from '../settings/settings.service';
 
 /** Dữ liệu sản phẩm để dựng video. */
 export interface VideoProductInput {
@@ -33,7 +34,10 @@ const OMNI_DURATION = 10; // Omni ~10s, 720p
 export class RenderService {
   private readonly logger = new Logger(RenderService.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly settings: SettingsService,
+  ) {}
 
   private key(): string {
     const k = this.config.get<string>('GEMINI_API_KEY');
@@ -49,9 +53,11 @@ export class RenderService {
   private get omniModel(): string {
     return this.config.get<string>('OMNI_MODEL') || 'gemini-omni-flash-preview';
   }
-  /** Engine tạo video: 'omni' (quay thật hơn, 720p) hoặc 'veo' (Full HD 1080p). */
-  private get engine(): string {
-    return (this.config.get<string>('VIDEO_ENGINE') || 'omni').toLowerCase();
+  /** Engine tạo video: 'omni' (quay thật, 720p) hoặc 'veo' (Full HD 1080p).
+   *  Ưu tiên setting DB (đổi qua admin) -> env -> mặc định omni. */
+  async resolveEngine(): Promise<string> {
+    const s = await this.settings.get('VIDEO_ENGINE');
+    return (s || this.config.get<string>('VIDEO_ENGINE') || 'omni').toLowerCase();
   }
   private headers() {
     return { 'x-goog-api-key': this.key(), 'Content-Type': 'application/json' };
@@ -152,7 +158,8 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
 
   /** Tạo video từ ảnh + prompt, chọn engine theo cấu hình (omni | veo). */
   async generateVideo(imageUrl: string, prompt: string): Promise<Buffer> {
-    return this.engine === 'veo'
+    const engine = await this.resolveEngine();
+    return engine === 'veo'
       ? this.generateVideoVeo(imageUrl, prompt)
       : this.generateVideoOmni(imageUrl, prompt);
   }
@@ -277,7 +284,8 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
 
     const script = await this.generateScript({ ...p, images });
     const videoBuffer = await this.generateVideo(images[0], script.veoPrompt);
-    const durationSec = this.engine === 'veo' ? VEO_DURATION : OMNI_DURATION;
+    const durationSec =
+      (await this.resolveEngine()) === 'veo' ? VEO_DURATION : OMNI_DURATION;
     return {
       videoBuffer,
       caption: script.caption,

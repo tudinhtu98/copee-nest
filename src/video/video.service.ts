@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 
 export interface VideoJobData {
   jobId: string;
@@ -20,12 +21,16 @@ export class VideoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly settings: SettingsService,
     @InjectQueue('video') private readonly queue: Queue,
   ) {}
 
-  /** Số điểm trừ mỗi video (mặc định 2000, cấu hình qua VIDEO_COST). */
-  get cost(): number {
-    return parseInt(this.config.get<string>('VIDEO_COST') || '5000', 10);
+  /** Số điểm trừ mỗi video. Ưu tiên setting DB (đổi qua admin) -> env -> 5000. */
+  async getCost(): Promise<number> {
+    const s = await this.settings.get('VIDEO_COST');
+    const raw = s || this.config.get<string>('VIDEO_COST') || '5000';
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : 5000;
   }
 
   /** Bóc shopid + itemid từ link Shopee để match sản phẩm cho chắc. */
@@ -91,13 +96,14 @@ export class VideoService {
     }
 
     // Kiểm tra số dư trước (trừ tiền thật khi render xong ở processor)
+    const cost = await this.getCost();
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { balance: true },
     });
-    if (!user || user.balance < this.cost) {
+    if (!user || user.balance < cost) {
       throw new BadRequestException(
-        `Số dư không đủ. Cần ${this.cost.toLocaleString('vi-VN')} điểm cho 1 video.`,
+        `Số dư không đủ. Cần ${cost.toLocaleString('vi-VN')} điểm cho 1 video.`,
       );
     }
 

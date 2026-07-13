@@ -8,6 +8,7 @@ import { join, isAbsolute } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { RenderService } from './render.service';
+import { SettingsService } from '../settings/settings.service';
 import { toAffiliateLink, finalizeCaption } from './caption';
 import { NotifyEvents } from '../telegram/telegram.events';
 import type {
@@ -26,13 +27,17 @@ export class VideoProcessor extends WorkerHost {
     private readonly billing: BillingService,
     private readonly render: RenderService,
     private readonly config: ConfigService,
+    private readonly settings: SettingsService,
     private readonly events: EventEmitter2,
   ) {
     super();
   }
 
-  private get cost(): number {
-    return parseInt(this.config.get<string>('VIDEO_COST') || '5000', 10);
+  /** Điểm trừ mỗi video: setting DB (đổi qua admin) -> env -> 5000. */
+  private async getCost(): Promise<number> {
+    const s = await this.settings.get('VIDEO_COST');
+    const n = parseInt(s || this.config.get<string>('VIDEO_COST') || '5000', 10);
+    return Number.isFinite(n) && n >= 0 ? n : 5000;
   }
 
   /** Thư mục lưu video (mặc định ./uploads/videos). */
@@ -89,9 +94,10 @@ export class VideoProcessor extends WorkerHost {
       await writeFile(videoPath, result.videoBuffer);
 
       // 5) Trừ tiền (chỉ khi thành công)
+      const cost = await this.getCost();
       await this.billing.debit(
         userId,
-        this.cost,
+        cost,
         `VIDEO:${jobId}`,
         `Tạo video: ${product.title}`.slice(0, 180),
       );
@@ -104,7 +110,7 @@ export class VideoProcessor extends WorkerHost {
           videoUrl: videoPath,
           durationSec: result.durationSec,
           caption,
-          cost: this.cost,
+          cost,
           errorMessage: null,
         },
       });

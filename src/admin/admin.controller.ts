@@ -29,6 +29,20 @@ export class AdminController {
     return this.admin.summary();
   }
 
+  @Get('settings')
+  getSettings() {
+    return this.admin.getVideoSettings();
+  }
+
+  @Patch('settings')
+  @Roles(UserRole.ADMIN)
+  @Audit('UPDATE_SETTINGS', 'Setting')
+  updateSettings(
+    @Body() body: { videoEngine?: string; videoCost?: number },
+  ) {
+    return this.admin.updateVideoSettings(body);
+  }
+
   @Post('users/:id/credit')
   @Audit('CREDIT_USER', 'User')
   creditUser(

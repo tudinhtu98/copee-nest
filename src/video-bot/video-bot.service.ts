@@ -174,7 +174,7 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
       await ctx.reply('⏳ Đang tạo video... (khoảng 1-2 phút, mình sẽ gửi lại khi xong)');
       const job = await this.video.createFromUrl(user.id, url);
       return ctx.reply(
-        `✅ Đã nhận! Đang tạo video (phí ${formatPoints(this.video.cost)} điểm khi xong).\nMã job: ${job.id}`,
+        `✅ Đã nhận! Đang tạo video (phí ${formatPoints(await this.video.getCost())} điểm khi xong).\nMã job: ${job.id}`,
       );
     } catch (e: any) {
       return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);
@@ -247,7 +247,7 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
     try {
       const job = await this.video.createFromProduct(userId, productId);
       return ctx.reply(
-        `⏳ Đang tạo video (phí ${formatPoints(this.video.cost)} điểm khi xong).\nMã job: ${job.id}\nMình sẽ gửi lại khi hoàn tất.`,
+        `⏳ Đang tạo video (phí ${formatPoints(await this.video.getCost())} điểm khi xong).\nMã job: ${job.id}\nMình sẽ gửi lại khi hoàn tất.`,
       );
     } catch (e: any) {
       return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);

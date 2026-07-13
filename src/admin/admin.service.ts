@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
+import { SettingsService } from '../settings/settings.service';
 import { UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -11,7 +12,35 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /** Cấu hình video (engine + chi phí) cho trang admin. */
+  async getVideoSettings() {
+    const s = await this.settings.getMany(['VIDEO_ENGINE', 'VIDEO_COST']);
+    return {
+      videoEngine: (s.VIDEO_ENGINE || process.env.VIDEO_ENGINE || 'omni').toLowerCase(),
+      videoCost: parseInt(s.VIDEO_COST || process.env.VIDEO_COST || '5000', 10),
+    };
+  }
+
+  async updateVideoSettings(body: { videoEngine?: string; videoCost?: number }) {
+    if (body.videoEngine !== undefined) {
+      const e = String(body.videoEngine).toLowerCase();
+      if (!['omni', 'veo'].includes(e)) {
+        throw new BadRequestException("Engine phải là 'omni' hoặc 'veo'");
+      }
+      await this.settings.set('VIDEO_ENGINE', e);
+    }
+    if (body.videoCost !== undefined) {
+      const c = Number(body.videoCost);
+      if (!Number.isFinite(c) || c < 0) {
+        throw new BadRequestException('Chi phí không hợp lệ');
+      }
+      await this.settings.set('VIDEO_COST', String(Math.round(c)));
+    }
+    return this.getVideoSettings();
+  }
 
   async summary() {
     const [
