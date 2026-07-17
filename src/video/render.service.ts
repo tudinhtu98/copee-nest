@@ -77,7 +77,9 @@ export class RenderService {
     veoPrompt: string;
     caption: string;
   }> {
-    const prompt = `Bạn là đạo diễn quảng cáo sản phẩm. Video dọc 9:16 ~8s, đăng Facebook gắn LINK AFFILIATE, quay-thật, nổi bật sản phẩm để kích thích mua.
+    // Nhịp kịch bản khớp độ dài engine đang dùng (Omni ~10s, Veo 8s).
+    const durSec = (await this.resolveEngine()) === 'veo' ? VEO_DURATION : OMNI_DURATION;
+    const prompt = `Bạn là đạo diễn quảng cáo sản phẩm. Video dọc 9:16 ~${durSec}s, đăng Facebook gắn LINK AFFILIATE, quay-thật, nổi bật sản phẩm để kích thích mua.
 Sản phẩm: ${p.title}${p.category ? ` (loại: ${p.category})` : ''}, giá ${this.vnd(p.price)}${p.originalPrice ? ` (gốc ${this.vnd(p.originalPrice)})` : ''}.
 
 CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống tự ghép):
