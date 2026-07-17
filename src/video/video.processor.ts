@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { writeFile, mkdir } from 'node:fs/promises';
+import { existsSync, statSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
@@ -46,6 +47,20 @@ export class VideoProcessor extends WorkerHost {
     return isAbsolute(d) ? d : join(process.cwd(), d);
   }
 
+  /** Ghép link affiliate của user vào caption thô. */
+  private async buildCaption(
+    userId: string,
+    sourceUrl: string,
+    rawCaption: string,
+  ): Promise<string> {
+    const site = await this.prisma.site.findFirst({
+      where: { userId, shopeeAffiliateId: { not: null } },
+      select: { shopeeAffiliateId: true },
+    });
+    const affLink = toAffiliateLink(sourceUrl, site?.shopeeAffiliateId);
+    return finalizeCaption(rawCaption, affLink);
+  }
+
   async process(job: Job<VideoJobData>): Promise<any> {
     const { jobId, userId, productId } = job.data;
 
@@ -68,51 +83,92 @@ export class VideoProcessor extends WorkerHost {
         data: { status: 'PROCESSING' },
       });
 
-      this.logger.log(`🎬 Tạo video job ${jobId}: ${product.title}`);
-
       const images = Array.isArray(product.images)
         ? (product.images as string[])
         : [];
-
-      // 1) Gemini viết kịch bản (chữ tiếng Anh cuối video) + caption,
-      //    2) Omni sinh video (có nhạc native + chữ cuối do Omni tự vẽ)
-      const result = await this.render.renderProductVideo({
-        title: product.title,
-        category: product.category,
-        price: product.price,
-        originalPrice: product.originalPrice,
-        images,
-      });
-
-      // 3) Ghép link affiliate vào caption
-      const site = await this.prisma.site.findFirst({
-        where: { userId, shopeeAffiliateId: { not: null } },
-        select: { shopeeAffiliateId: true },
-      });
-      const affLink = toAffiliateLink(product.sourceUrl, site?.shopeeAffiliateId);
-      const caption = finalizeCaption(result.caption, affLink);
-
-      // 4) Lưu video ra file
-      await mkdir(this.videoDir, { recursive: true });
       const videoPath = join(this.videoDir, `${jobId}.mp4`);
-      await writeFile(videoPath, result.videoBuffer);
 
-      // 5) Trừ tiền (chỉ khi thành công)
+      // GUARD chống render trùng: nếu file video đã tồn tại từ lần chạy trước
+      // (job retry sau khi render xong nhưng bước sau lỗi) thì KHÔNG gọi AI lại
+      // -> tránh bị Google tính tiền lần 2 (~40k/lần).
+      const alreadyRendered =
+        existsSync(videoPath) && statSync(videoPath).size > 0;
+
+      let caption = videoJob.caption ?? '';
+      let durationSec: number | null = videoJob.durationSec ?? null;
+
+      if (alreadyRendered) {
+        this.logger.warn(
+          `♻️ Job ${jobId}: video đã render trước đó — bỏ qua gọi AI (tránh tính tiền lần 2).`,
+        );
+        // Hiếm: có file nhưng chưa kịp lưu caption -> tạo lại caption (rẻ, chỉ Gemini text)
+        if (!caption) {
+          const script = await this.render.generateScript({
+            title: product.title,
+            category: product.category,
+            price: product.price,
+            originalPrice: product.originalPrice,
+            images,
+          });
+          caption = await this.buildCaption(
+            userId,
+            product.sourceUrl,
+            script.caption,
+          );
+        }
+      } else {
+        this.logger.log(`🎬 Tạo video job ${jobId}: ${product.title}`);
+        // 1) Gemini viết kịch bản + caption, 2) Omni/Veo sinh video (nhạc native, không chữ)
+        const result = await this.render.renderProductVideo({
+          title: product.title,
+          category: product.category,
+          price: product.price,
+          originalPrice: product.originalPrice,
+          images,
+        });
+        caption = await this.buildCaption(
+          userId,
+          product.sourceUrl,
+          result.caption,
+        );
+        durationSec = result.durationSec;
+
+        // Lưu video ra file
+        await mkdir(this.videoDir, { recursive: true });
+        await writeFile(videoPath, result.videoBuffer);
+
+        // Đánh dấu ĐÃ RENDER sớm (trước khi trừ tiền): nếu bước sau lỗi,
+        // lần retry sẽ dùng lại file này thay vì gọi AI lại.
+        await this.prisma.videoJob.update({
+          where: { id: jobId },
+          data: { videoUrl: videoPath, caption, durationSec },
+        });
+      }
+
+      // Trừ tiền — IDEMPOTENT theo reference VIDEO:jobId (retry KHÔNG trừ 2 lần).
       const cost = await this.getCost();
-      await this.billing.debit(
-        userId,
-        cost,
-        `VIDEO:${jobId}`,
-        `Tạo video: ${product.title}`.slice(0, 180),
-      );
+      const debited = await this.prisma.transaction.findFirst({
+        where: { reference: `VIDEO:${jobId}`, type: 'DEBIT' },
+        select: { id: true },
+      });
+      if (!debited) {
+        await this.billing.debit(
+          userId,
+          cost,
+          `VIDEO:${jobId}`,
+          `Tạo video: ${product.title}`.slice(0, 180),
+        );
+      } else {
+        this.logger.warn(`Job ${jobId}: đã trừ tiền trước đó — bỏ qua.`);
+      }
 
-      // 6) Lưu kết quả
+      // Lưu kết quả cuối
       await this.prisma.videoJob.update({
         where: { id: jobId },
         data: {
           status: 'DONE',
           videoUrl: videoPath,
-          durationSec: result.durationSec,
+          durationSec,
           caption,
           cost,
           errorMessage: null,
