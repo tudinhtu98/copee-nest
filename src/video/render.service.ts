@@ -68,9 +68,9 @@ export class RenderService {
   }
 
   /**
-   * Gemini chỉ trả các THÀNH PHẦN kịch bản (cảnh + tên EN + CTA + caption);
-   * còn prompt gửi Omni được GHÉP THEO TEMPLATE CHUẨN trong code để chỉ thị
-   * "chữ cuối video" luôn mạnh, rõ, không bị chìm/bỏ qua.
+   * Gemini chỉ trả các THÀNH PHẦN kịch bản (cảnh quay + caption);
+   * prompt gửi Omni được GHÉP THEO TEMPLATE CHUẨN trong code: ép khung dọc
+   * 9:16 và chỉ thị KHÔNG chèn bất kỳ chữ nào lên video.
    */
   async generateScript(p: VideoProductInput): Promise<{
     veoPrompt: string;
@@ -81,9 +81,7 @@ Sản phẩm: ${p.title}${p.category ? ` (loại: ${p.category})` : ''}, giá ${
 
 CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống tự ghép):
 {
-  "scene": "Mô tả cảnh quay bằng TIẾNG ANH cho AI video image-to-video, VERTICAL 9:16 portrait: cinematic, photorealistic, live-action product commercial (NOT animation/CGI), dynamic camera, realistic lighting, upbeat music. BẮT BUỘC ghi rõ: keep the product's EXACT colors, materials, logo and design identical to the reference image, do not recolor or restyle the product. No on-screen text during this part.",
-  "end_title": "TÊN SẢN PHẨM bằng TIẾNG ANH, IN HOA, ngắn gọn (thêm màu nếu có), ví dụ 'ADIDAS ADIZERO SL - BLACK'",
-  "end_cta": "câu kêu gọi ngắn bằng tiếng Anh; mặc định 'Available now - Link in bio'",
+  "scene": "Mô tả cảnh quay bằng TIẾNG ANH cho AI video image-to-video, VERTICAL 9:16 portrait: cinematic, photorealistic, live-action product commercial (NOT animation/CGI), dynamic camera, realistic lighting, upbeat music. BẮT BUỘC ghi rõ: keep the product's EXACT colors, materials, logo and design identical to the reference image, do not recolor or restyle the product. Absolutely NO on-screen text, captions, titles or watermarks anywhere in the video.",
   "post_caption": "caption TIẾNG VIỆT đăng Facebook: hook giật tít + lợi ích + giá + kêu gọi bấm link mua + 5-7 hashtag. KHÔNG tự chèn link."
 }`;
 
@@ -114,18 +112,13 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
     const scene: string =
       parsed.scene ||
       'Cinematic photorealistic live-action product commercial, dynamic camera, realistic lighting, upbeat music. Keep the product exactly as in the reference image.';
-    const endTitle: string = (parsed.end_title || p.title).toString().toUpperCase().slice(0, 40);
-    const endCta: string = parsed.end_cta || 'Available now - Link in bio';
 
-    // Ghép prompt CHUẨN — ép khung dọc 9:16 + chỉ thị chữ cuối đặt riêng, mạnh.
+    // Ghép prompt CHUẨN — ép khung dọc 9:16, KHÔNG chèn bất kỳ chữ nào lên video.
     const veoPrompt =
       `VERTICAL 9:16 portrait video (aspect ratio 9:16, 720x1280, taller than wide). ` +
       `${scene}\n\n` +
-      `IMPORTANT ON-SCREEN TEXT (this is required): In the final 3 seconds of the video, ` +
-      `overlay a bold animated title card centered on screen. ` +
-      `Top line — large, bold, UPPERCASE, white, sans-serif, with a subtle shadow — reads exactly: "${endTitle}". ` +
-      `Second line — smaller white text on a solid dark rounded bar, directly below the title — reads exactly: "${endCta}". ` +
-      `The text must be sharp, high-contrast, perfectly legible and spelled EXACTLY as written in quotes. Do not add any other text.`;
+      `NO on-screen text: do not render any text, captions, titles, subtitles, ` +
+      `letters, numbers, logos overlay or watermarks anywhere in the video.`;
 
     return {
       veoPrompt,
