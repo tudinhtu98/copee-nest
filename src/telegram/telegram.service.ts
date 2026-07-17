@@ -39,6 +39,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private tiers: Tier[] = [];
   private allowedIds = new Set<number>();
   private pending = new Map<number, Pending>();
+  /** Channel để đăng video (nếu cấu hình). Bot phải là admin của channel. */
+  private videoChannelId?: string;
 
   constructor(
     private readonly config: ConfigService,
@@ -68,6 +70,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         'TELEGRAM_ADMIN_IDS đang rỗng — KHÔNG ai dùng được bot. Hãy thêm chat id của admin.',
       );
     }
+
+    this.videoChannelId =
+      this.config.get<string>('TELEGRAM_VIDEO_CHANNEL_ID')?.trim() || undefined;
 
     this.bot = new Telegraf(token);
     this.registerHandlers(this.bot);
@@ -140,7 +145,27 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
   @OnEvent(NotifyEvents.VideoReady)
   async onVideoReadyAdmin(p: VideoReadyPayload) {
-    if (!this.bot || this.allowedIds.size === 0) return;
+    if (!this.bot) return;
+
+    // Ưu tiên: đăng video lên channel (không kèm tên user)
+    if (this.videoChannelId) {
+      try {
+        await this.bot.telegram.sendVideo(
+          this.videoChannelId,
+          { source: p.videoPath },
+          { caption: `🎬 ${p.productTitle}\n\n${p.caption}`.slice(0, 1024) },
+        );
+        return;
+      } catch (err) {
+        this.logger.warn(
+          `Không đăng video lên channel ${this.videoChannelId}: ${err}`,
+        );
+        // rơi xuống gửi cho admin để không mất thông báo
+      }
+    }
+
+    // Mặc định (không có channel / channel lỗi): gửi cho admin, kèm tên user
+    if (this.allowedIds.size === 0) return;
     const who = p.username ? `@${p.username}` : `tg:${p.telegramId}`;
     const header = `🎬 Video mới tạo xong\n👤 ${who}\n📦 ${p.productTitle}`;
     for (const id of this.allowedIds) {
