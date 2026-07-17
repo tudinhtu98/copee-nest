@@ -21,6 +21,7 @@ export interface RenderResult {
 const GBASE = 'https://generativelanguage.googleapis.com/v1beta';
 const VEO_DURATION = 8; // Veo tối đa 8s/clip ở 1080p
 const OMNI_DURATION = 10; // Omni ~10s, 720p
+const MAX_VIDEO_IMAGES = 5; // tối đa 5 ảnh đưa vào AI (Omni dùng cả 5; Veo chỉ dùng ảnh đầu)
 
 /**
  * Sinh video quảng cáo sản phẩm bằng Gemini + Veo:
@@ -149,24 +150,40 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
     return { data: buf.toString('base64'), mime };
   }
 
-  /** Tạo video từ ảnh + prompt, chọn engine theo cấu hình (omni | veo). */
-  async generateVideo(imageUrl: string, prompt: string): Promise<Buffer> {
+  /**
+   * Tạo video từ (tối đa 5) ảnh + prompt, chọn engine theo cấu hình (omni | veo).
+   * Omni nhận nhiều ảnh tham chiếu; Veo image-to-video chỉ nhận 1 ảnh (dùng ảnh đầu).
+   */
+  async generateVideo(imageUrls: string[], prompt: string): Promise<Buffer> {
     const engine = await this.resolveEngine();
     return engine === 'veo'
-      ? this.generateVideoVeo(imageUrl, prompt)
-      : this.generateVideoOmni(imageUrl, prompt);
+      ? this.generateVideoVeo(imageUrls[0], prompt)
+      : this.generateVideoOmni(imageUrls, prompt);
   }
 
   /**
    * Gemini Omni Flash (Interactions API) — image-to-video, ĐỒNG BỘ (không poll).
    * Chân thực hơn Veo, 720p ~10s, có nhạc native. Trả Buffer mp4.
    */
-  async generateVideoOmni(imageUrl: string, prompt: string): Promise<Buffer> {
-    const img = await this.fetchImageBase64(imageUrl);
+  async generateVideoOmni(
+    imageUrls: string[],
+    prompt: string,
+  ): Promise<Buffer> {
+    // Tối đa 5 ảnh; tải song song, ảnh nào lỗi thì bỏ qua (không làm hỏng cả video).
+    const urls = imageUrls.slice(0, MAX_VIDEO_IMAGES);
+    const settled = await Promise.allSettled(
+      urls.map((u) => this.fetchImageBase64(u)),
+    );
+    const imgs = settled
+      .filter((s): s is PromiseFulfilledResult<{ data: string; mime: string }> => s.status === 'fulfilled')
+      .map((s) => s.value);
+    if (imgs.length === 0) throw new Error('Không tải được ảnh nào để tạo video');
+    this.logger.log(`Omni: đưa ${imgs.length}/${urls.length} ảnh vào tạo video`);
+
     const body = JSON.stringify({
       model: this.omniModel,
       input: [
-        { type: 'image', data: img.data, mime_type: img.mime },
+        ...imgs.map((im) => ({ type: 'image', data: im.data, mime_type: im.mime })),
         { type: 'text', text: prompt },
       ],
     });
@@ -275,8 +292,9 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
     );
     if (images.length === 0) throw new Error('Sản phẩm không có ảnh để tạo video');
 
-    const script = await this.generateScript({ ...p, images });
-    const videoBuffer = await this.generateVideo(images[0], script.veoPrompt);
+    const capped = images.slice(0, MAX_VIDEO_IMAGES);
+    const script = await this.generateScript({ ...p, images: capped });
+    const videoBuffer = await this.generateVideo(capped, script.veoPrompt);
     const durationSec =
       (await this.resolveEngine()) === 'veo' ? VEO_DURATION : OMNI_DURATION;
     return {
