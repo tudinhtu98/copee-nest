@@ -15,6 +15,8 @@ import type {
   UserCreatedPayload,
   SiteCreatedPayload,
   DepositIntentPayload,
+  VideoReadyPayload,
+  VideoFailedPayload,
 } from './telegram.events';
 
 /** Trạng thái hội thoại tạm thời theo từng chat của admin. */
@@ -133,6 +135,42 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         `Username: ${p.username}\n` +
         `Số tiền: ${formatPoints(p.amount)}₫\n\n` +
         `Kiểm tra chuyển khoản rồi nạp: /napt ${p.username}`,
+    );
+  }
+
+  @OnEvent(NotifyEvents.VideoReady)
+  async onVideoReadyAdmin(p: VideoReadyPayload) {
+    if (!this.bot || this.allowedIds.size === 0) return;
+    const who = p.username ? `@${p.username}` : `tg:${p.telegramId}`;
+    const header = `🎬 Video mới tạo xong\n👤 ${who}\n📦 ${p.productTitle}`;
+    for (const id of this.allowedIds) {
+      try {
+        await this.bot.telegram.sendVideo(
+          id,
+          { source: p.videoPath },
+          { caption: `${header}\n\n${p.caption}`.slice(0, 1024) },
+        );
+      } catch (err) {
+        this.logger.warn(`Không gửi video cho admin ${id}: ${err}`);
+        try {
+          await this.bot.telegram.sendMessage(
+            id,
+            `${header}\n\n${p.caption}`.slice(0, 4096),
+          );
+        } catch (e) {
+          this.logger.warn(
+            `Không gửi được caption video cho admin ${id}: ${e}`,
+          );
+        }
+      }
+    }
+  }
+
+  @OnEvent(NotifyEvents.VideoFailed)
+  async onVideoFailedAdmin(p: VideoFailedPayload) {
+    const who = p.username ? `@${p.username}` : `tg:${p.telegramId || '—'}`;
+    await this.notify(
+      `❌ Video tạo thất bại\n👤 ${who}\n📦 ${p.productTitle}\nLý do: ${p.reason}`,
     );
   }
 

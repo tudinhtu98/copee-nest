@@ -30,10 +30,12 @@ export interface VideoReadyPayload {
   videoPath: string; // đường dẫn file mp4 trên server
   caption: string;
   productTitle: string;
+  username?: string; // user copee tạo video (để bot admin biết ai làm)
 }
 
 export interface VideoFailedPayload {
   telegramId: string;
   productTitle: string;
   reason: string;
+  username?: string; // user copee tạo video (để bot admin biết ai làm)
 }

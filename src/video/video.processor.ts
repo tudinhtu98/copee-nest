@@ -51,12 +51,16 @@ export class VideoProcessor extends WorkerHost {
 
     const videoJob = await this.prisma.videoJob.findUnique({
       where: { id: jobId },
-      include: { product: true, user: { select: { telegramId: true } } },
+      include: {
+        product: true,
+        user: { select: { telegramId: true, username: true } },
+      },
     });
     if (!videoJob) throw new Error(`Video job ${jobId} không tồn tại`);
 
     const product = videoJob.product;
     const telegramId = videoJob.user.telegramId;
+    const username = videoJob.user.username;
 
     try {
       await this.prisma.videoJob.update({
@@ -122,6 +126,7 @@ export class VideoProcessor extends WorkerHost {
           videoPath,
           caption,
           productTitle: product.title,
+          username,
         } as VideoReadyPayload);
       }
 
@@ -143,11 +148,12 @@ export class VideoProcessor extends WorkerHost {
         },
       });
 
-      if (!shouldRetry && telegramId) {
+      if (!shouldRetry) {
         this.events.emit(NotifyEvents.VideoFailed, {
-          telegramId,
+          telegramId: telegramId || '',
           productTitle: product.title,
           reason: e.message?.slice(0, 200) || 'Lỗi không xác định',
+          username,
         } as VideoFailedPayload);
       }
 

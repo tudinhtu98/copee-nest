@@ -278,7 +278,7 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
 
   @OnEvent(NotifyEvents.VideoFailed)
   async onVideoFailed(p: VideoFailedPayload) {
-    if (!this.bot) return;
+    if (!this.bot || !p.telegramId) return;
     try {
       await this.bot.telegram.sendMessage(
         p.telegramId,
