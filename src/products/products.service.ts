@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { UploadService } from '../upload/upload.service';
+import { ShopeeService } from '../shopee/shopee.service';
 
 @Injectable()
 export class ProductsService {
@@ -14,6 +15,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly billing: BillingService,
     private readonly uploadService: UploadService,
+    private readonly shopee: ShopeeService,
   ) {}
 
   async list(
@@ -62,6 +64,8 @@ export class ProductsService {
           description: string | null
           images: string[] | null
           currency: string | null
+          affiliate_url: string | null
+          affiliate_sub_id: string | null
           created_at: Date
           updated_at: Date | null
         }>>(
@@ -101,6 +105,8 @@ export class ProductsService {
         description: item.description,
         images: item.images,
         currency: item.currency,
+        affiliateUrl: item.affiliate_url,
+        affiliateSubId: item.affiliate_sub_id,
         createdAt: item.created_at,
         updatedAt: item.updated_at,
       }))
@@ -412,6 +418,33 @@ export class ProductsService {
     }
 
     return this.prisma.product.update({ where: { id: productId }, data: updateData });
+  }
+
+  /**
+   * Tạo lại link affiliate cho sản phẩm từ sourceUrl + affiliate ID trong tài khoản user.
+   */
+  async refreshAffiliateLink(
+    userId: string,
+    productId: string,
+    options?: { subId?: string },
+  ) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product || product.userId !== userId) {
+      throw new ForbiddenException('Không tìm thấy sản phẩm');
+    }
+
+    const { affiliateId, subId, affiliateUrl } =
+      await this.shopee.createAffiliateLink(userId, {
+        url: product.sourceUrl,
+        subId: options?.subId,
+      });
+
+    const updated = await this.prisma.product.update({
+      where: { id: productId },
+      data: { affiliateUrl, affiliateSubId: subId },
+    });
+
+    return { product: updated, affiliateId, subId, affiliateUrl };
   }
 
   async deleteProduct(userId: string, productId: string) {

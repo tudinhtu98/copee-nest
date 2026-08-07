@@ -20,6 +20,7 @@ import { TelegramModule } from './telegram/telegram.module';
 import { VideoModule } from './video/video.module';
 import { VideoBotModule } from './video-bot/video-bot.module';
 import { SettingsModule } from './settings/settings.module';
+import { ShopeeModule } from './shopee/shopee.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { SettingsModule } from './settings/settings.module';
     VideoModule,
     VideoBotModule,
     SettingsModule,
+    ShopeeModule,
   ],
   controllers: [AppController],
   providers: [

@@ -223,26 +223,15 @@ export class UploadProcessor extends WorkerHost {
       images: uploadedImages.length > 0 ? uploadedImages : undefined,
     };
     
-    // Add external URL and button text for Shopee link
-    // Convert to affiliate link if affiliate ID is configured
-    if (product.sourceUrl) {
-      let externalUrl = product.sourceUrl;
-      
-      // Convert to Shopee affiliate link if affiliate ID is set
-      if (site.shopeeAffiliateId && site.shopeeAffiliateId.trim()) {
-        try {
-          const url = new URL(externalUrl);
-          // Add or update aff_id parameter
-          url.searchParams.set('aff_id', site.shopeeAffiliateId.trim());
-          externalUrl = url.toString();
-          console.log(`[Queue] Converted to affiliate link: ${externalUrl}`);
-        } catch (error) {
-          console.warn(`[Queue] Failed to convert to affiliate link, using original: ${error}`);
-        }
-      }
-      
+    // Add external URL and button text for Shopee link.
+    // Ưu tiên link affiliate đã tạo sẵn trên sản phẩm, không có thì dùng link nguồn.
+    const externalUrl = product.affiliateUrl?.trim() || product.sourceUrl;
+    if (externalUrl) {
       body.external_url = externalUrl;
       body.button_text = 'Mua ngay';
+      if (product.affiliateUrl?.trim()) {
+        console.log(`[Queue] Using product affiliate link: ${externalUrl}`);
+      }
     }
     
     console.log(`[Queue] 📦 Uploading product to WooCommerce: ${product.title} (${uploadedImages.length} images, category: ${categoryArray?.[0]?.id || categoryArray?.[0]?.name || 'none'})`);

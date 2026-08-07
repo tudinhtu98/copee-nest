@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Patch, UseGuards, Req } from '@nestjs/common';
+import { Body, Controller, Get, Post, Patch, UseGuards, Req } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AuthGuard } from '@nestjs/passport';
 import type { AuthenticatedRequest } from './authenticated-request';
@@ -40,6 +40,12 @@ export class AuthController {
     });
   }
 
+  @Get('profile')
+  @UseGuards(AuthGuard('jwt'))
+  getProfile(@Req() req: AuthenticatedRequest) {
+    return this.auth.getProfile(req.user.userId);
+  }
+
   @Patch('profile')
   @UseGuards(AuthGuard('jwt'))
   updateProfile(
@@ -48,6 +54,7 @@ export class AuthController {
     body: {
       currentPassword?: string;
       newPassword?: string;
+      shopeeAffiliateId?: string | null;
     },
   ) {
     return this.auth.updateProfile(req.user.userId, body);

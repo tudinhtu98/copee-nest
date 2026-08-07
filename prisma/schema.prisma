@@ -19,6 +19,7 @@ model User {
   balance      Int            @default(10000)
   bannedAt     DateTime?      @map("banned_at")
   telegramId   String?        @unique @map("telegram_id") // Chat id Telegram đã liên kết để nhận video qua bot
+  shopeeAffiliateId String?   @map("shopee_affiliate_id") // Affiliate ID Shopee của user, dùng để tạo link aff cho sản phẩm
   createdAt    DateTime       @default(now()) @map("created_at")
   updatedAt    DateTime       @updatedAt @map("updated_at")
   products     Product[]
@@ -40,7 +41,6 @@ model Site {
   wooConsumerSecret     String                @map("woo_consumer_secret")
   wpUsername            String?               @map("wp_username") // WordPress username for Application Password
   wpApplicationPassword String?               @map("wp_application_password") // WordPress Application Password (encrypted)
-  shopeeAffiliateId     String?               @map("shopee_affiliate_id") // Shopee Affiliate ID for converting product links
   createdAt             DateTime              @default(now()) @map("created_at")
   updatedAt             DateTime              @updatedAt @map("updated_at")
   user                  User                  @relation(fields: [userId], references: [id])
@@ -68,6 +68,8 @@ model Product {
   updatedAt     DateTime      @updatedAt @map("updated_at")
   categoryId    String?       @map("category_id")
   needsMapping  Boolean       @default(false) @map("needs_mapping")
+  affiliateUrl  String?       @map("affiliate_url") // Link affiliate Shopee đã tạo từ sourceUrl
+  affiliateSubId String?      @map("affiliate_sub_id") // sub_id dùng khi tạo link (tracking nguồn)
   user          User          @relation(fields: [userId], references: [id])
   uploads       UploadJob[]
   videoJobs     VideoJob[]

@@ -111,6 +111,19 @@ export class ProductsController {
     return this.products.copyProduct(req.user.userId, body);
   }
 
+  /** Tạo/cập nhật link affiliate cho sản phẩm bằng affiliate ID trong tài khoản user. */
+  @Post(':id/affiliate-link')
+  @RequirePermissions('products:write')
+  refreshAffiliateLink(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body?: { subId?: string },
+  ) {
+    return this.products.refreshAffiliateLink(req.user.userId, id, {
+      subId: body?.subId,
+    });
+  }
+
   @Patch(':id')
   update(
     @Req() req: AuthenticatedRequest,

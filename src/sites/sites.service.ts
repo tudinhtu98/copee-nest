@@ -48,7 +48,6 @@ export class SitesService {
       wooConsumerSecret: string;
       wpUsername?: string;
       wpApplicationPassword?: string;
-      shopeeAffiliateId?: string;
     },
   ) {
     const { baseUrl, wooConsumerKey, wooConsumerSecret, wpUsername, wpApplicationPassword } = input;
@@ -152,7 +151,6 @@ export class SitesService {
       wooConsumerSecret?: string;
       wpUsername?: string;
       wpApplicationPassword?: string;
-      shopeeAffiliateId?: string;
     },
   ) {
     const site = await this.prisma.site.findFirst({ where: { id, userId } });
@@ -180,9 +178,6 @@ export class SitesService {
     }
     if (input.wpApplicationPassword !== undefined) {
       updateData.wpApplicationPassword = input.wpApplicationPassword || null;
-    }
-    if (input.shopeeAffiliateId !== undefined) {
-      updateData.shopeeAffiliateId = input.shopeeAffiliateId || null;
     }
     return this.prisma.site.update({
       where: { id },

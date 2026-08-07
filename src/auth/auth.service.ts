@@ -299,11 +299,32 @@ export class AuthService {
     };
   }
 
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        role: true,
+        balance: true,
+        shopeeAffiliateId: true,
+        telegramId: true,
+        createdAt: true,
+      },
+    });
+    if (!user) {
+      throw new BadRequestException('User không tồn tại');
+    }
+    return user;
+  }
+
   async updateProfile(
     userId: string,
     params: {
       currentPassword?: string;
       newPassword?: string;
+      shopeeAffiliateId?: string | null;
     },
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
@@ -332,6 +353,17 @@ export class AuthService {
       updateData.passwordHash = await bcrypt.hash(params.newPassword, 10);
     }
 
+    // Shopee Affiliate ID: chuỗi rỗng = xoá
+    if (params.shopeeAffiliateId !== undefined) {
+      const affId = params.shopeeAffiliateId?.trim();
+      if (affId && !/^[A-Za-z0-9_-]{3,64}$/.test(affId)) {
+        throw new BadRequestException(
+          'Shopee Affiliate ID không hợp lệ (chỉ gồm chữ, số, gạch ngang/dưới)',
+        );
+      }
+      updateData.shopeeAffiliateId = affId || null;
+    }
+
     if (Object.keys(updateData).length === 0) {
       throw new BadRequestException('Không có thông tin nào để cập nhật');
     }
@@ -344,6 +376,7 @@ export class AuthService {
         email: true,
         username: true,
         role: true,
+        shopeeAffiliateId: true,
         createdAt: true,
       },
     });

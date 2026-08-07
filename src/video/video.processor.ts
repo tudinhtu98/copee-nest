@@ -10,7 +10,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { RenderService } from './render.service';
 import { SettingsService } from '../settings/settings.service';
-import { toAffiliateLink, finalizeCaption } from './caption';
+import { finalizeCaption } from './caption';
+import { ShopeeService } from '../shopee/shopee.service';
+import { buildShopeeAffiliateLink } from '../shopee/affiliate';
 import { NotifyEvents } from '../telegram/telegram.events';
 import type {
   VideoReadyPayload,
@@ -30,6 +32,7 @@ export class VideoProcessor extends WorkerHost {
     private readonly config: ConfigService,
     private readonly settings: SettingsService,
     private readonly events: EventEmitter2,
+    private readonly shopee: ShopeeService,
   ) {
     super();
   }
@@ -47,18 +50,27 @@ export class VideoProcessor extends WorkerHost {
     return isAbsolute(d) ? d : join(process.cwd(), d);
   }
 
-  /** Ghép link affiliate của user vào caption thô. */
+  /**
+   * Ghép link mua vào caption thô: ưu tiên link affiliate đã lưu trên sản phẩm,
+   * không có thì tạo từ affiliate ID trong tài khoản, cuối cùng mới dùng link nguồn.
+   */
   private async buildCaption(
     userId: string,
-    sourceUrl: string,
+    product: { sourceUrl: string; affiliateUrl: string | null },
     rawCaption: string,
   ): Promise<string> {
-    const site = await this.prisma.site.findFirst({
-      where: { userId, shopeeAffiliateId: { not: null } },
-      select: { shopeeAffiliateId: true },
-    });
-    const affLink = toAffiliateLink(sourceUrl, site?.shopeeAffiliateId);
-    return finalizeCaption(rawCaption, affLink);
+    let link = product.affiliateUrl?.trim() || '';
+
+    if (!link) {
+      const affiliateId = await this.shopee.getUserAffiliateId(userId);
+      if (affiliateId) {
+        link =
+          buildShopeeAffiliateLink(product.sourceUrl, affiliateId)
+            ?.affiliateUrl || '';
+      }
+    }
+
+    return finalizeCaption(rawCaption, link || product.sourceUrl);
   }
 
   async process(job: Job<VideoJobData>): Promise<any> {
@@ -112,7 +124,7 @@ export class VideoProcessor extends WorkerHost {
           });
           caption = await this.buildCaption(
             userId,
-            product.sourceUrl,
+            product,
             script.caption,
           );
         }
@@ -128,7 +140,7 @@ export class VideoProcessor extends WorkerHost {
         });
         caption = await this.buildCaption(
           userId,
-          product.sourceUrl,
+          product,
           result.caption,
         );
         durationSec = result.durationSec;

@@ -5,9 +5,10 @@ import { BillingModule } from '../billing/billing.module';
 import { UploadModule } from '../upload/upload.module';
 import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { AuthModule } from '../auth/auth.module';
+import { ShopeeModule } from '../shopee/shopee.module';
 
 @Module({
-  imports: [BillingModule, UploadModule, ApiKeysModule, AuthModule],
+  imports: [BillingModule, UploadModule, ApiKeysModule, AuthModule, ShopeeModule],
   providers: [ProductsService],
   controllers: [ProductsController],
 })

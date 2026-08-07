@@ -8,6 +8,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { BillingModule } from '../billing/billing.module';
 import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { AuthModule } from '../auth/auth.module';
+import { ShopeeModule } from '../shopee/shopee.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AuthModule } from '../auth/auth.module';
     BillingModule,
     ApiKeysModule,
     AuthModule,
+    ShopeeModule,
   ],
   controllers: [VideoController],
   providers: [VideoService, VideoProcessor, RenderService],
