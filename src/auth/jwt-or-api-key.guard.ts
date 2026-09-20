@@ -50,9 +50,8 @@ export class JwtOrApiKeyGuard implements CanActivate {
 
     // Try API key authentication
     try {
-      const { userId, permissions } = await this.apiKeysService.validateApiKey(
-        token,
-      );
+      const { userId, permissions } =
+        await this.apiKeysService.validateApiKey(token);
 
       // Check permissions if required
       const requiredPermissions = this.reflector.get<string[]>(
@@ -82,4 +81,3 @@ export class JwtOrApiKeyGuard implements CanActivate {
     }
   }
 }
-

@@ -4,9 +4,15 @@
  */
 
 /** Ghép caption Gemini + link mua (giới hạn 1024 ký tự cho Telegram video caption). */
-export function finalizeCaption(geminiCaption: string, affiliateLink: string): string {
+export function finalizeCaption(
+  geminiCaption: string,
+  affiliateLink: string,
+): string {
   const link = affiliateLink ? `\n\n👉 Mua ngay: ${affiliateLink}` : '';
   const room = 1024 - link.length;
-  const body = geminiCaption.length > room ? geminiCaption.slice(0, room - 1) + '…' : geminiCaption;
+  const body =
+    geminiCaption.length > room
+      ? geminiCaption.slice(0, room - 1) + '…'
+      : geminiCaption;
   return body + link;
 }

@@ -22,7 +22,12 @@ import type { AuthenticatedRequest } from '../auth/authenticated-request';
 import { JwtOrApiKeyGuard } from '../auth/jwt-or-api-key.guard';
 import { Roles } from '../auth/roles.decorator';
 import { ConnectionsService } from './connections.service';
-import { ConnectTokenDto, ImportImageDto, PublishPostDto, SavePostDto } from './dto';
+import {
+  ConnectTokenDto,
+  ImportImageDto,
+  PublishPostDto,
+  SavePostDto,
+} from './dto';
 import { MediaService, MEDIA_MAX_UPLOAD_MB } from './media.service';
 import { PagePostsService } from './page-posts.service';
 import { PostsService } from './posts.service';
@@ -46,7 +51,10 @@ export class SocialCallbackController {
     @Res() res: Response,
   ) {
     const target = `${this.config.get('PUBLIC_WEB_URL') || 'http://localhost:3000'}/dashboard/fanpage`;
-    if (error || !code) return res.redirect(`${target}?error=${encodeURIComponent(error || 'Kết nối bị huỷ')}`);
+    if (error || !code)
+      return res.redirect(
+        `${target}?error=${encodeURIComponent(error || 'Kết nối bị huỷ')}`,
+      );
     try {
       await this.connections.completeOAuth(code, state);
       return res.redirect(`${target}?connected=1`);
@@ -82,7 +90,10 @@ export class SocialController {
 
   /** Dán token thủ công (dùng khi chưa cấu hình App ID/Secret của Facebook). */
   @Post('facebook/token')
-  connectWithToken(@Req() req: AuthenticatedRequest, @Body() body: ConnectTokenDto) {
+  connectWithToken(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: ConnectTokenDto,
+  ) {
     return this.connections.connectWithToken(req.user.userId, body.accessToken);
   }
 
@@ -105,17 +116,33 @@ export class SocialController {
   }
 
   @Get('pages/:pageId/posts')
-  pagePosts(@Req() req: AuthenticatedRequest, @Param('pageId') pageId: string, @Query('after') after?: string) {
-    return this.pagePostsService.list(req.user.userId, pageId, after?.slice(0, 500) || undefined);
+  pagePosts(
+    @Req() req: AuthenticatedRequest,
+    @Param('pageId') pageId: string,
+    @Query('after') after?: string,
+  ) {
+    return this.pagePostsService.list(
+      req.user.userId,
+      pageId,
+      after?.slice(0, 500) || undefined,
+    );
   }
 
   @Post('pages/:pageId/posts/:postId/import')
-  importPagePost(@Req() req: AuthenticatedRequest, @Param('pageId') pageId: string, @Param('postId') postId: string) {
+  importPagePost(
+    @Req() req: AuthenticatedRequest,
+    @Param('pageId') pageId: string,
+    @Param('postId') postId: string,
+  ) {
     return this.pagePostsService.import(req.user.userId, pageId, postId);
   }
 
   @Delete('pages/:pageId/posts/:postId')
-  async removePagePost(@Req() req: AuthenticatedRequest, @Param('pageId') pageId: string, @Param('postId') postId: string) {
+  async removePagePost(
+    @Req() req: AuthenticatedRequest,
+    @Param('pageId') pageId: string,
+    @Param('postId') postId: string,
+  ) {
     await this.pagePostsService.remove(req.user.userId, pageId, postId);
     return { ok: true };
   }
@@ -128,8 +155,15 @@ export class SocialController {
   }
 
   @Post('media')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MEDIA_MAX_UPLOAD_MB * 1024 * 1024, files: 1 } }))
-  upload(@Req() req: AuthenticatedRequest, @UploadedFile() file?: { buffer: Buffer }) {
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MEDIA_MAX_UPLOAD_MB * 1024 * 1024, files: 1 },
+    }),
+  )
+  upload(
+    @Req() req: AuthenticatedRequest,
+    @UploadedFile() file?: { buffer: Buffer },
+  ) {
     if (!file) throw new BadRequestException('Chưa chọn ảnh để tải lên');
     return this.media.store(req.user.userId, file.buffer, { source: 'UPLOAD' });
   }
@@ -141,7 +175,11 @@ export class SocialController {
   }
 
   @Get('media/:id/file')
-  async mediaFile(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Res() res: Response) {
+  async mediaFile(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
     const asset = await this.media.find(req.user.userId, id);
     res.setHeader('Content-Type', asset.mimeType);
     // id ảnh không bao giờ đổi nội dung nên cho trình duyệt giữ lâu
@@ -158,7 +196,10 @@ export class SocialController {
   // ───────────── Bài viết ─────────────
 
   @Get('posts')
-  listPosts(@Req() req: AuthenticatedRequest, @Query('status') status?: string) {
+  listPosts(
+    @Req() req: AuthenticatedRequest,
+    @Query('status') status?: string,
+  ) {
     return this.posts.list(req.user.userId, status as never);
   }
 
@@ -168,7 +209,11 @@ export class SocialController {
   }
 
   @Patch('posts/:id')
-  updatePost(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: SavePostDto) {
+  updatePost(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: SavePostDto,
+  ) {
     return this.posts.update(req.user.userId, id, body);
   }
 
@@ -179,7 +224,11 @@ export class SocialController {
   }
 
   @Post('posts/:id/publish')
-  publish(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: PublishPostDto) {
+  publish(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: PublishPostDto,
+  ) {
     return this.posts.publish(req.user.userId, id, body.scheduledAt ?? null);
   }
 

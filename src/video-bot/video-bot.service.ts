@@ -38,7 +38,8 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
   /** Tạo mã liên kết (gọi từ web) để user nhập /lienket <mã> vào bot video. */
   generateLinkCode(userId: string): { code: string; expiresInSec: number } {
     const now = Date.now();
-    for (const [c, v] of this.linkCodes) if (v.exp < now) this.linkCodes.delete(c);
+    for (const [c, v] of this.linkCodes)
+      if (v.exp < now) this.linkCodes.delete(c);
     const code = randomBytes(4).toString('hex').toUpperCase();
     const ttl = 10 * 60 * 1000;
     this.linkCodes.set(code, { userId, exp: now + ttl });
@@ -64,7 +65,10 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
           .setMyCommands([
             { command: 'start', description: 'Bắt đầu / hướng dẫn' },
             { command: 'lienket', description: 'Liên kết tài khoản copee' },
-            { command: 'sanpham', description: 'Sản phẩm gần nhất (vd /sanpham 10)' },
+            {
+              command: 'sanpham',
+              description: 'Sản phẩm gần nhất (vd /sanpham 10)',
+            },
             { command: 'tim', description: 'Tìm sản phẩm (vd /tim giày)' },
             { command: 'help', description: 'Xem các lệnh' },
           ])
@@ -101,7 +105,9 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
     bot.command('lienket', (ctx) => this.handleLink(ctx));
     bot.command('sanpham', (ctx) => this.handleRecent(ctx));
     bot.command('tim', (ctx) => this.handleSearch(ctx));
-    bot.hears(/https?:\/\/\S*shopee\S*/i, (ctx) => this.handleVideoRequest(ctx));
+    bot.hears(/https?:\/\/\S*shopee\S*/i, (ctx) =>
+      this.handleVideoRequest(ctx),
+    );
 
     // Bấm nút chọn sản phẩm -> tạo video
     bot.action(/^mkvid:(.+)$/, (ctx) => this.handlePickProduct(ctx));
@@ -132,7 +138,9 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
     const entry = this.linkCodes.get(code);
     if (!entry || entry.exp < Date.now()) {
       this.linkCodes.delete(code);
-      return ctx.reply('❌ Mã không hợp lệ hoặc đã hết hạn. Lấy mã mới trên web nhé.');
+      return ctx.reply(
+        '❌ Mã không hợp lệ hoặc đã hết hạn. Lấy mã mới trên web nhé.',
+      );
     }
 
     const telegramId = String(ctx.from.id);
@@ -168,16 +176,23 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
 
     const match = (ctx.message?.text || '').match(/https?:\/\/\S+/);
     const url = match ? match[0] : '';
-    if (!url) return ctx.reply('Không đọc được link. Gửi lại link sản phẩm Shopee nhé.');
+    if (!url)
+      return ctx.reply(
+        'Không đọc được link. Gửi lại link sản phẩm Shopee nhé.',
+      );
 
     try {
-      await ctx.reply('⏳ Đang tạo video... (khoảng 1-2 phút, mình sẽ gửi lại khi xong)');
+      await ctx.reply(
+        '⏳ Đang tạo video... (khoảng 1-2 phút, mình sẽ gửi lại khi xong)',
+      );
       const job = await this.video.createFromUrl(user.id, url);
       return ctx.reply(
         `✅ Đã nhận! Đang tạo video (phí ${formatPoints(await this.video.getCost())} điểm khi xong).\nMã job: ${job.id}`,
       );
     } catch (e: any) {
-      return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);
+      return ctx.reply(
+        `⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`,
+      );
     }
   }
 
@@ -204,10 +219,19 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
   private async handleRecent(ctx: any) {
     const userId = await this.requireUserId(ctx);
     if (!userId) return;
-    const arg = (ctx.message?.text || '').replace(/^\/sanpham(@\w+)?\s*/i, '').trim();
+    const arg = (ctx.message?.text || '')
+      .replace(/^\/sanpham(@\w+)?\s*/i, '')
+      .trim();
     const n = arg ? parseInt(arg, 10) : 10;
-    const products = await this.video.recentProducts(userId, Number.isFinite(n) ? n : 10);
-    return this.sendProductList(ctx, products, `🕒 ${products.length} sản phẩm gần nhất`);
+    const products = await this.video.recentProducts(
+      userId,
+      Number.isFinite(n) ? n : 10,
+    );
+    return this.sendProductList(
+      ctx,
+      products,
+      `🕒 ${products.length} sản phẩm gần nhất`,
+    );
   }
 
   /** /tim <từ khoá> — tìm sản phẩm theo tên. */
@@ -217,7 +241,11 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
     const q = (ctx.message?.text || '').replace(/^\/tim(@\w+)?\s*/i, '').trim();
     if (!q) return ctx.reply('Cú pháp: /tim <từ khoá>\nVí dụ: /tim giày');
     const products = await this.video.searchProducts(userId, q, 15);
-    return this.sendProductList(ctx, products, `🔎 Kết quả cho "${q}" (${products.length})`);
+    return this.sendProductList(
+      ctx,
+      products,
+      `🔎 Kết quả cho "${q}" (${products.length})`,
+    );
   }
 
   /** Hiện danh sách sản phẩm kèm nút bấm chọn để tạo video. */
@@ -233,9 +261,17 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
     }
     const rows = products.map((p) => {
       const title = p.title.length > 30 ? p.title.slice(0, 30) + '…' : p.title;
-      return [Markup.button.callback(`🎬 ${title} — ${this.vnd(p.price)}`, `mkvid:${p.id}`)];
+      return [
+        Markup.button.callback(
+          `🎬 ${title} — ${this.vnd(p.price)}`,
+          `mkvid:${p.id}`,
+        ),
+      ];
     });
-    return ctx.reply(header + '\n\nBấm để tạo video:', Markup.inlineKeyboard(rows));
+    return ctx.reply(
+      header + '\n\nBấm để tạo video:',
+      Markup.inlineKeyboard(rows),
+    );
   }
 
   /** Bấm nút chọn 1 sản phẩm -> tạo video. */
@@ -250,7 +286,9 @@ export class VideoBotService implements OnModuleInit, OnModuleDestroy {
         `⏳ Đang tạo video (phí ${formatPoints(await this.video.getCost())} điểm khi xong).\nMã job: ${job.id}\nMình sẽ gửi lại khi hoàn tất.`,
       );
     } catch (e: any) {
-      return ctx.reply(`⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`);
+      return ctx.reply(
+        `⚠️ ${e?.message || 'Không tạo được video, thử lại sau.'}`,
+      );
     }
   }
 

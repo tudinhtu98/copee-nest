@@ -4,9 +4,7 @@ import { Queue } from 'bullmq';
 
 @Injectable()
 export class UploadService {
-  constructor(
-    @InjectQueue('upload') private uploadQueue: Queue,
-  ) {}
+  constructor(@InjectQueue('upload') private uploadQueue: Queue) {}
 
   async addUploadJob(data: {
     jobId: string;
@@ -31,13 +29,15 @@ export class UploadService {
     });
   }
 
-  async addBulkUploadJobs(jobs: Array<{
-    jobId: string;
-    productId: string;
-    siteId: string;
-    targetCategory?: string;
-    userId: string;
-  }>) {
+  async addBulkUploadJobs(
+    jobs: Array<{
+      jobId: string;
+      productId: string;
+      siteId: string;
+      targetCategory?: string;
+      userId: string;
+    }>,
+  ) {
     // Configure concurrency: process up to 5 jobs in parallel
     // This can be adjusted based on server capacity and WooCommerce API limits
     return this.uploadQueue.addBulk(
@@ -82,4 +82,3 @@ export class UploadService {
     };
   }
 }
-

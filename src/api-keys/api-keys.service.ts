@@ -136,7 +136,9 @@ export class ApiKeysService {
       if (error instanceof UnauthorizedException) {
         throw error;
       }
-      throw new UnauthorizedException('API key không hợp lệ hoặc đã bị thu hồi');
+      throw new UnauthorizedException(
+        'API key không hợp lệ hoặc đã bị thu hồi',
+      );
     }
 
     return {

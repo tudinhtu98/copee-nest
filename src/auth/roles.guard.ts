@@ -23,7 +23,9 @@ export class RolesGuard implements CanActivate {
     }
 
     const request = context.switchToHttp().getRequest();
-    const user = request.user as { role?: UserRole; isApiKey?: boolean } | undefined;
+    const user = request.user as
+      | { role?: UserRole; isApiKey?: boolean }
+      | undefined;
 
     // Skip role check for API keys (they use permissions instead)
     if (user?.isApiKey) {

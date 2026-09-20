@@ -117,7 +117,11 @@ export class AuditLogService {
     const filtered = Array.isArray(data) ? [...data] : { ...data };
 
     for (const key in filtered) {
-      if (sensitiveFields.some((field) => key.toLowerCase().includes(field.toLowerCase()))) {
+      if (
+        sensitiveFields.some((field) =>
+          key.toLowerCase().includes(field.toLowerCase()),
+        )
+      ) {
         filtered[key] = '[REDACTED]';
       } else if (typeof filtered[key] === 'object' && filtered[key] !== null) {
         filtered[key] = this.filterSensitiveData(filtered[key]);

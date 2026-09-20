@@ -38,13 +38,19 @@ export class CryptoService {
         throw new Error(`ENCRYPTION_KEYS sai định dạng ở "${part}"`);
       }
       if (key.length !== 32) {
-        throw new Error(`Khoá phiên bản ${version} phải dài đúng 32 byte (đang ${key.length})`);
+        throw new Error(
+          `Khoá phiên bản ${version} phải dài đúng 32 byte (đang ${key.length})`,
+        );
       }
       this.keys.set(version, key);
     }
-    this.activeVersion = Number(this.config.get<string>('ENCRYPTION_ACTIVE_KEY_VERSION') ?? 1);
+    this.activeVersion = Number(
+      this.config.get<string>('ENCRYPTION_ACTIVE_KEY_VERSION') ?? 1,
+    );
     if (!this.keys.has(this.activeVersion)) {
-      throw new Error(`ENCRYPTION_ACTIVE_KEY_VERSION=${this.activeVersion} không có trong ENCRYPTION_KEYS`);
+      throw new Error(
+        `ENCRYPTION_ACTIVE_KEY_VERSION=${this.activeVersion} không có trong ENCRYPTION_KEYS`,
+      );
     }
   }
 
@@ -52,7 +58,11 @@ export class CryptoService {
   encrypt(plain: string): string {
     this.load();
     const iv = randomBytes(IV_BYTES);
-    const cipher = createCipheriv(ALGORITHM, this.keys.get(this.activeVersion)!, iv);
+    const cipher = createCipheriv(
+      ALGORITHM,
+      this.keys.get(this.activeVersion)!,
+      iv,
+    );
     const data = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
     return [
       `v${this.activeVersion}`,
@@ -70,8 +80,15 @@ export class CryptoService {
     if (!key || !ivB64 || !tagB64 || !dataB64) {
       throw new Error('Dữ liệu mã hoá không hợp lệ hoặc thiếu khoá giải mã');
     }
-    const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(ivB64, 'base64'));
+    const decipher = createDecipheriv(
+      ALGORITHM,
+      key,
+      Buffer.from(ivB64, 'base64'),
+    );
     decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
-    return Buffer.concat([decipher.update(Buffer.from(dataB64, 'base64')), decipher.final()]).toString('utf8');
+    return Buffer.concat([
+      decipher.update(Buffer.from(dataB64, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
   }
 }

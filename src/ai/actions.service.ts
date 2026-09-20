@@ -1,11 +1,26 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { AiAction, AiActionKind, AiActionSource, Product } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import type {
+  AiAction,
+  AiActionKind,
+  AiActionSource,
+  Product,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { PagePostsService } from '../social/page-posts.service';
 import { PostsService, validateSchedule } from '../social/posts.service';
 import { VideoService } from '../video/video.service';
-import { ContentService, type ImageAspectRatio, IMAGE_ASPECT_RATIOS } from './content.service';
+import {
+  ContentService,
+  type ImageAspectRatio,
+  IMAGE_ASPECT_RATIOS,
+} from './content.service';
 import { PointsService } from './points.service';
 
 /** Đề xuất quá thời hạn này mà chưa xác nhận thì phải tạo lại (số liệu có thể đã đổi). */
@@ -84,7 +99,9 @@ function dateVn(d: Date): string {
 
 function snippet(text: string, max = 100): string {
   const flat = (text ?? '').replace(/\s+/g, ' ').trim();
-  return flat.length > max ? `${flat.slice(0, max)}…` : flat || '(không có chữ)';
+  return flat.length > max
+    ? `${flat.slice(0, max)}…`
+    : flat || '(không có chữ)';
 }
 
 export function toActionDto(a: AiAction, now = new Date()): ActionDto {
@@ -132,11 +149,19 @@ export class ActionsService {
   ) {}
 
   async list(userId: string): Promise<ActionDto[]> {
-    const rows = await this.prisma.aiAction.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 50 });
+    const rows = await this.prisma.aiAction.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
     return rows.map((r) => toActionDto(r));
   }
 
-  async propose(actor: ActionActor, kind: AiActionKind, rawParams: unknown): Promise<ActionDto> {
+  async propose(
+    actor: ActionActor,
+    kind: AiActionKind,
+    rawParams: unknown,
+  ): Promise<ActionDto> {
     this.assertCanWrite(actor);
     const params = (rawParams ?? {}) as Record<string, unknown>;
     const plan = await this.plan(actor.userId, kind, params);
@@ -164,31 +189,50 @@ export class ActionsService {
     this.assertCanWrite(actor);
     const action = await this.find(actor.userId, id);
     if (action.status !== 'PROPOSED') {
-      throw new ConflictException(`Đề xuất này đã ở trạng thái "${toActionDto(action).status}", không thực hiện lại được`);
+      throw new ConflictException(
+        `Đề xuất này đã ở trạng thái "${toActionDto(action).status}", không thực hiện lại được`,
+      );
     }
     if (action.expiresAt < new Date()) {
-      await this.prisma.aiAction.updateMany({ where: { id, status: 'PROPOSED' }, data: { status: 'EXPIRED' } });
-      throw new ConflictException(`Đề xuất đã quá ${ACTION_TTL_MINUTES} phút. Hãy tạo đề xuất mới.`);
+      await this.prisma.aiAction.updateMany({
+        where: { id, status: 'PROPOSED' },
+        data: { status: 'EXPIRED' },
+      });
+      throw new ConflictException(
+        `Đề xuất đã quá ${ACTION_TTL_MINUTES} phút. Hãy tạo đề xuất mới.`,
+      );
     }
     const claimed = await this.prisma.aiAction.updateMany({
       where: { id, userId: actor.userId, status: 'PROPOSED' },
       data: { status: 'EXECUTING' },
     });
-    if (!claimed.count) throw new ConflictException('Đề xuất này đang hoặc đã được thực hiện');
+    if (!claimed.count)
+      throw new ConflictException('Đề xuất này đang hoặc đã được thực hiện');
 
     try {
       const items = await this.execute(actor.userId, action);
       const done = await this.prisma.aiAction.update({
         where: { id },
-        data: { status: 'EXECUTED', result: { items } as object, executedAt: new Date(), error: null },
+        data: {
+          status: 'EXECUTED',
+          result: { items } as object,
+          executedAt: new Date(),
+          error: null,
+        },
       });
       return toActionDto(done);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      this.logger.warn(`Thực hiện đề xuất ${id} (${action.kind}) lỗi: ${message}`);
+      this.logger.warn(
+        `Thực hiện đề xuất ${id} (${action.kind}) lỗi: ${message}`,
+      );
       const failed = await this.prisma.aiAction.update({
         where: { id },
-        data: { status: 'FAILED', error: message.slice(0, 1000), executedAt: new Date() },
+        data: {
+          status: 'FAILED',
+          error: message.slice(0, 1000),
+          executedAt: new Date(),
+        },
       });
       return toActionDto(failed);
     }
@@ -200,7 +244,8 @@ export class ActionsService {
       where: { id, userId: actor.userId, status: 'PROPOSED' },
       data: { status: 'CANCELLED' },
     });
-    if (!count) throw new ConflictException('Chỉ huỷ được đề xuất đang chờ xác nhận');
+    if (!count)
+      throw new ConflictException('Chỉ huỷ được đề xuất đang chờ xác nhận');
     return toActionDto(await this.find(actor.userId, id));
   }
 
@@ -214,7 +259,11 @@ export class ActionsService {
 
   // ───────────────────────── Lập đề xuất ─────────────────────────
 
-  private async plan(userId: string, kind: AiActionKind, p: Record<string, unknown>): Promise<Plan> {
+  private async plan(
+    userId: string,
+    kind: AiActionKind,
+    p: Record<string, unknown>,
+  ): Promise<Plan> {
     switch (kind) {
       case 'PUBLISH_POST':
         return this.planPublish(userId, p);
@@ -227,79 +276,118 @@ export class ActionsService {
       case 'UPLOAD_PRODUCT':
         return this.planUpload(userId, p);
       default:
-        throw new BadRequestException(`Loại thao tác không hỗ trợ: ${String(kind)}`);
+        throw new BadRequestException(
+          `Loại thao tác không hỗ trợ: ${String(kind)}`,
+        );
     }
   }
 
-  private async planPublish(userId: string, p: Record<string, unknown>): Promise<Plan> {
+  private async planPublish(
+    userId: string,
+    p: Record<string, unknown>,
+  ): Promise<Plan> {
     const postId = String(p.postId ?? '');
     const post = await this.posts.get(userId, postId);
     if (post.status !== 'DRAFT' && post.status !== 'FAILED') {
       throw new ConflictException('Chỉ đăng được bài nháp hoặc bài đăng lỗi');
     }
-    if (!post.pageId || !post.pageName) throw new BadRequestException('Bài chưa chọn Page để đăng');
+    if (!post.pageId || !post.pageName)
+      throw new BadRequestException('Bài chưa chọn Page để đăng');
     const scheduledAt = p.scheduledAt ? new Date(String(p.scheduledAt)) : null;
     if (scheduledAt) validateSchedule(scheduledAt);
     return {
-      summary: scheduledAt ? `Hẹn giờ đăng bài lên "${post.pageName}"` : `Đăng bài lên "${post.pageName}" ngay`,
+      summary: scheduledAt
+        ? `Hẹn giờ đăng bài lên "${post.pageName}"`
+        : `Đăng bài lên "${post.pageName}" ngay`,
       items: [
         { label: 'Fanpage', after: post.pageName },
         { label: 'Nội dung', after: snippet(post.message, 160) },
         { label: 'Ảnh', after: `${post.media.length} ảnh` },
-        { label: 'Thời gian', after: scheduledAt ? dateVn(scheduledAt) : 'Ngay khi xác nhận' },
+        {
+          label: 'Thời gian',
+          after: scheduledAt ? dateVn(scheduledAt) : 'Ngay khi xác nhận',
+        },
       ],
-      warnings: scheduledAt ? [] : ['Bài hiện công khai trên fanpage ngay khi xác nhận.'],
-      params: { postId: post.id, scheduledAt: scheduledAt?.toISOString() ?? null },
+      warnings: scheduledAt
+        ? []
+        : ['Bài hiện công khai trên fanpage ngay khi xác nhận.'],
+      params: {
+        postId: post.id,
+        scheduledAt: scheduledAt?.toISOString() ?? null,
+      },
       costPoints: 0,
     };
   }
 
-  private async planDeletePagePost(userId: string, p: Record<string, unknown>): Promise<Plan> {
+  private async planDeletePagePost(
+    userId: string,
+    p: Record<string, unknown>,
+  ): Promise<Plan> {
     const pageId = String(p.pageId ?? '');
     const postId = String(p.postId ?? '');
-    const page = await this.prisma.facebookPage.findFirst({ where: { id: pageId, userId } });
+    const page = await this.prisma.facebookPage.findFirst({
+      where: { id: pageId, userId },
+    });
     if (!page) throw new NotFoundException('Không tìm thấy Page');
-    if (!postId.startsWith(`${page.externalId}_`)) throw new BadRequestException('Bài viết không thuộc Page này');
+    if (!postId.startsWith(`${page.externalId}_`))
+      throw new BadRequestException('Bài viết không thuộc Page này');
     return {
       summary: `Xoá bài trên fanpage "${page.name}"`,
       items: [
         { label: 'Fanpage', after: page.name },
         { label: 'Bài viết', after: postId },
       ],
-      warnings: ['Bài bị xoá cùng toàn bộ lượt thích, bình luận, chia sẻ. Không khôi phục được.'],
+      warnings: [
+        'Bài bị xoá cùng toàn bộ lượt thích, bình luận, chia sẻ. Không khôi phục được.',
+      ],
       params: { pageId: page.id, postId },
       costPoints: 0,
     };
   }
 
-  private async planImage(userId: string, p: Record<string, unknown>): Promise<Plan> {
+  private async planImage(
+    userId: string,
+    p: Record<string, unknown>,
+  ): Promise<Plan> {
     const prompt = String(p.prompt ?? '').trim();
-    if (prompt.length < 5) throw new BadRequestException('Mô tả ảnh ít nhất 5 ký tự');
-    const aspectRatio = (IMAGE_ASPECT_RATIOS as readonly string[]).includes(String(p.aspectRatio))
+    if (prompt.length < 5)
+      throw new BadRequestException('Mô tả ảnh ít nhất 5 ký tự');
+    const aspectRatio = (IMAGE_ASPECT_RATIOS as readonly string[]).includes(
+      String(p.aspectRatio),
+    )
       ? (String(p.aspectRatio) as ImageAspectRatio)
       : '1:1';
     const cost = await this.pointsService.cost('AI_IMAGE_COST');
-    const product = p.productId ? await this.findProduct(userId, String(p.productId)) : null;
+    const product = p.productId
+      ? await this.findProduct(userId, String(p.productId))
+      : null;
     return {
       summary: 'AI tạo ảnh',
       items: [
         { label: 'Mô tả', after: snippet(prompt, 160) },
         { label: 'Khung ảnh', after: aspectRatio },
-        ...(product ? [{ label: 'Ảnh gốc', after: `Ảnh sản phẩm "${product.title}"` }] : []),
+        ...(product
+          ? [{ label: 'Ảnh gốc', after: `Ảnh sản phẩm "${product.title}"` }]
+          : []),
         { label: 'Chi phí', after: points(cost) },
       ],
       warnings: [`Xác nhận là trừ ${points(cost)} khỏi số dư.`],
       params: {
         prompt,
         aspectRatio,
-        ...(p.referenceMediaId ? { referenceMediaId: String(p.referenceMediaId) } : {}),
+        ...(p.referenceMediaId
+          ? { referenceMediaId: String(p.referenceMediaId) }
+          : {}),
         ...(product ? { productId: product.id } : {}),
       },
       costPoints: cost,
     };
   }
 
-  private async planVideo(userId: string, p: Record<string, unknown>): Promise<Plan> {
+  private async planVideo(
+    userId: string,
+    p: Record<string, unknown>,
+  ): Promise<Plan> {
     const product = await this.findProduct(userId, String(p.productId ?? ''));
     const cost = await this.video.getCost();
     const style = String(p.style ?? 'default');
@@ -310,41 +398,70 @@ export class ActionsService {
         { label: 'Kiểu video', after: style },
         { label: 'Chi phí', after: points(cost) },
       ],
-      warnings: [`Xác nhận là trừ ${points(cost)} và xếp hàng render (vài phút mới xong).`],
+      warnings: [
+        `Xác nhận là trừ ${points(cost)} và xếp hàng render (vài phút mới xong).`,
+      ],
       params: { productId: product.id, style },
       costPoints: cost,
     };
   }
 
-  private async planUpload(userId: string, p: Record<string, unknown>): Promise<Plan> {
+  private async planUpload(
+    userId: string,
+    p: Record<string, unknown>,
+  ): Promise<Plan> {
     const product = await this.findProduct(userId, String(p.productId ?? ''));
-    const site = await this.prisma.site.findFirst({ where: { id: String(p.siteId ?? ''), userId } });
+    const site = await this.prisma.site.findFirst({
+      where: { id: String(p.siteId ?? ''), userId },
+    });
     if (!site) throw new NotFoundException('Không tìm thấy site');
-    const targetCategory = p.targetCategory ? String(p.targetCategory) : undefined;
+    const targetCategory = p.targetCategory
+      ? String(p.targetCategory)
+      : undefined;
     return {
       summary: `Đăng "${snippet(product.title, 50)}" lên ${site.name}`,
       items: [
         { label: 'Sản phẩm', after: product.title },
         { label: 'Site', after: `${site.name} (${site.baseUrl})` },
-        ...(targetCategory ? [{ label: 'Danh mục', after: targetCategory }] : []),
+        ...(targetCategory
+          ? [{ label: 'Danh mục', after: targetCategory }]
+          : []),
       ],
       warnings: ['Sản phẩm sẽ được đẩy lên website thật của bạn.'],
-      params: { productId: product.id, siteId: site.id, ...(targetCategory ? { targetCategory } : {}) },
+      params: {
+        productId: product.id,
+        siteId: site.id,
+        ...(targetCategory ? { targetCategory } : {}),
+      },
       costPoints: 0,
     };
   }
 
   // ───────────────────────── Thực hiện ─────────────────────────
 
-  private async execute(userId: string, action: AiAction): Promise<ActionItem[]> {
+  private async execute(
+    userId: string,
+    action: AiAction,
+  ): Promise<ActionItem[]> {
     const p = action.params as Record<string, unknown>;
     const preview = action.preview as unknown as ActionPreview;
-    const done = (extra: ActionItem[] = []) => [...preview.items.map((i) => ({ ...i, ok: true })), ...extra];
+    const done = (extra: ActionItem[] = []) => [
+      ...preview.items.map((i) => ({ ...i, ok: true })),
+      ...extra,
+    ];
 
     switch (action.kind) {
       case 'PUBLISH_POST': {
-        const post = await this.posts.publish(userId, String(p.postId), (p.scheduledAt as string | null) ?? null);
-        return done(post.permalink ? [{ label: 'Link bài', after: post.permalink, ok: true }] : []);
+        const post = await this.posts.publish(
+          userId,
+          String(p.postId),
+          (p.scheduledAt as string | null) ?? null,
+        );
+        return done(
+          post.permalink
+            ? [{ label: 'Link bài', after: post.permalink, ok: true }]
+            : [],
+        );
       }
 
       case 'DELETE_PAGE_POST':
@@ -355,7 +472,9 @@ export class ActionsService {
         const { asset, cost } = await this.content.generateImage(userId, {
           prompt: String(p.prompt),
           aspectRatio: String(p.aspectRatio) as ImageAspectRatio,
-          ...(p.referenceMediaId ? { referenceMediaId: String(p.referenceMediaId) } : {}),
+          ...(p.referenceMediaId
+            ? { referenceMediaId: String(p.referenceMediaId) }
+            : {}),
           ...(p.productId ? { productId: String(p.productId) } : {}),
         });
         return done([
@@ -365,10 +484,18 @@ export class ActionsService {
       }
 
       case 'CREATE_VIDEO': {
-        const job = await this.video.createFromProduct(userId, String(p.productId), String(p.style ?? 'default'));
+        const job = await this.video.createFromProduct(
+          userId,
+          String(p.productId),
+          String(p.style ?? 'default'),
+        );
         return done([
           { label: 'Mã job', after: job.id, ok: true },
-          { label: 'Trạng thái', after: 'Đang xếp hàng render, xong sẽ báo trong mục Video', ok: true },
+          {
+            label: 'Trạng thái',
+            after: 'Đang xếp hàng render, xong sẽ báo trong mục Video',
+            ok: true,
+          },
         ]);
       }
 
@@ -376,19 +503,31 @@ export class ActionsService {
         await this.products.createUploadJob(userId, {
           productIds: [String(p.productId)],
           siteId: String(p.siteId),
-          ...(p.targetCategory ? { targetCategory: String(p.targetCategory) } : {}),
+          ...(p.targetCategory
+            ? { targetCategory: String(p.targetCategory) }
+            : {}),
         });
-        return done([{ label: 'Trạng thái', after: 'Đã xếp hàng đăng lên site', ok: true }]);
+        return done([
+          { label: 'Trạng thái', after: 'Đã xếp hàng đăng lên site', ok: true },
+        ]);
       }
 
       default:
-        throw new BadRequestException(`Loại thao tác không hỗ trợ: ${String(action.kind)}`);
+        throw new BadRequestException(
+          `Loại thao tác không hỗ trợ: ${String(action.kind)}`,
+        );
     }
   }
 
-  private async findProduct(userId: string, productId: string): Promise<Product> {
-    const product = await this.prisma.product.findFirst({ where: { id: productId, userId } });
-    if (!product) throw new NotFoundException(`Không tìm thấy sản phẩm ${productId}`);
+  private async findProduct(
+    userId: string,
+    productId: string,
+  ): Promise<Product> {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, userId },
+    });
+    if (!product)
+      throw new NotFoundException(`Không tìm thấy sản phẩm ${productId}`);
     return product;
   }
 

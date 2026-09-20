@@ -34,11 +34,16 @@ export class SavePostDto {
 
   @IsOptional()
   @ValidateIf((_, value) => value !== null && value !== '')
-  @IsUrl({ require_protocol: true }, { message: 'Link phải bắt đầu bằng http:// hoặc https://' })
+  @IsUrl(
+    { require_protocol: true },
+    { message: 'Link phải bắt đầu bằng http:// hoặc https://' },
+  )
   link?: string | null;
 
   @IsArray()
-  @ArrayMaxSize(POST_MAX_IMAGES, { message: `Mỗi bài tối đa ${POST_MAX_IMAGES} ảnh` })
+  @ArrayMaxSize(POST_MAX_IMAGES, {
+    message: `Mỗi bài tối đa ${POST_MAX_IMAGES} ảnh`,
+  })
   @IsString({ each: true })
   @Type(() => String)
   mediaIds: string[] = [];
@@ -47,7 +52,10 @@ export class SavePostDto {
 export class PublishPostDto {
   /** Bỏ trống = đăng ngay. */
   @IsOptional()
-  @IsISO8601({ strict: true }, { message: 'Giờ hẹn phải theo định dạng ISO 8601' })
+  @IsISO8601(
+    { strict: true },
+    { message: 'Giờ hẹn phải theo định dạng ISO 8601' },
+  )
   scheduledAt?: string;
 }
 

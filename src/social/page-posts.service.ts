@@ -32,10 +32,15 @@ export interface PagePostsResponse {
 /** Link website của bài chia sẻ link (Facebook bọc qua l.facebook.com, lấy bản gốc). */
 function sharedLink(p: MetaPagePost): string | null {
   const first = p.attachments?.data?.[0];
-  return first?.type === 'share' && first.unshimmed_url ? first.unshimmed_url : null;
+  return first?.type === 'share' && first.unshimmed_url
+    ? first.unshimmed_url
+    : null;
 }
 
-export function toPagePostDto(p: MetaPagePost, local: Map<string, string>): PagePostDto {
+export function toPagePostDto(
+  p: MetaPagePost,
+  local: Map<string, string>,
+): PagePostDto {
   const first = p.attachments?.data?.[0];
   const albumSize = first?.subattachments?.data?.length ?? 0;
   return {
@@ -70,14 +75,25 @@ export class PagePostsService {
     private readonly posts: PostsService,
   ) {}
 
-  async list(userId: string, pageId: string, after?: string): Promise<PagePostsResponse> {
-    const { page, token } = await this.connections.pageWithToken(userId, pageId);
+  async list(
+    userId: string,
+    pageId: string,
+    after?: string,
+  ): Promise<PagePostsResponse> {
+    const { page, token } = await this.connections.pageWithToken(
+      userId,
+      pageId,
+    );
     if (!(await this.hasReadScope(page.connectionId))) {
       throw new BadRequestException(
         'Kết nối Facebook thiếu quyền "pages_read_user_content" để xem bài trên Page. Hãy kết nối lại và đồng ý cấp quyền.',
       );
     }
-    const { posts, nextCursor } = await this.meta.listPagePosts(page.externalId, token, after);
+    const { posts, nextCursor } = await this.meta.listPagePosts(
+      page.externalId,
+      token,
+      after,
+    );
     const ids = posts.map((p) => p.id);
     const rows = ids.length
       ? await this.prisma.contentPost.findMany({
@@ -93,20 +109,35 @@ export class PagePostsService {
    * Đưa bài có sẵn trên Page vào copee (tải ảnh đầu tiên về thư viện) để dùng lại nội dung
    * hoặc làm video. Gọi nhiều lần vẫn chỉ có một bản.
    */
-  async import(userId: string, pageId: string, postId: string): Promise<ContentPostDto> {
-    const { page, token } = await this.connections.pageWithToken(userId, pageId);
+  async import(
+    userId: string,
+    pageId: string,
+    postId: string,
+  ): Promise<ContentPostDto> {
+    const { page, token } = await this.connections.pageWithToken(
+      userId,
+      pageId,
+    );
     this.assertBelongs(page.externalId, postId);
-    const existing = await this.prisma.contentPost.findFirst({ where: { userId, externalPostId: postId } });
+    const existing = await this.prisma.contentPost.findFirst({
+      where: { userId, externalPostId: postId },
+    });
     if (existing) return this.posts.get(userId, existing.id);
 
     const post = await this.meta.getPagePost(postId, token);
     const mediaIds: string[] = [];
     if (post.full_picture) {
       try {
-        const asset = await this.media.store(userId, await this.meta.downloadImage(post.full_picture), { source: 'UPLOAD' });
+        const asset = await this.media.store(
+          userId,
+          await this.meta.downloadImage(post.full_picture),
+          { source: 'UPLOAD' },
+        );
         mediaIds.push(asset.id);
       } catch (e) {
-        this.logger.warn(`Không tải được ảnh của bài ${postId}: ${e instanceof Error ? e.message : String(e)}`);
+        this.logger.warn(
+          `Không tải được ảnh của bài ${postId}: ${e instanceof Error ? e.message : String(e)}`,
+        );
       }
     }
 
@@ -127,8 +158,13 @@ export class PagePostsService {
       return this.posts.get(userId, row.id);
     } catch (e) {
       // Hai lần nhập cùng lúc: lần sau đụng ràng buộc unique thì trả về bản đã tạo
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        const row = await this.prisma.contentPost.findFirstOrThrow({ where: { userId, externalPostId: postId } });
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        const row = await this.prisma.contentPost.findFirstOrThrow({
+          where: { userId, externalPostId: postId },
+        });
         return this.posts.get(userId, row.id);
       }
       throw e;
@@ -137,10 +173,15 @@ export class PagePostsService {
 
   /** Xoá bài trên Facebook (không khôi phục được) và gỡ bản trong copee nếu có. */
   async remove(userId: string, pageId: string, postId: string): Promise<void> {
-    const { page, token } = await this.connections.pageWithToken(userId, pageId);
+    const { page, token } = await this.connections.pageWithToken(
+      userId,
+      pageId,
+    );
     this.assertBelongs(page.externalId, postId);
     await this.meta.deletePagePost(postId, token);
-    await this.prisma.contentPost.deleteMany({ where: { userId, externalPostId: postId } });
+    await this.prisma.contentPost.deleteMany({
+      where: { userId, externalPostId: postId },
+    });
   }
 
   private async hasReadScope(connectionId: string): Promise<boolean> {

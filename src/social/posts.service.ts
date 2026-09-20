@@ -1,5 +1,16 @@
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { ContentPost, ContentPostStatus, FacebookPage, MediaAsset } from '@prisma/client';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import type {
+  ContentPost,
+  ContentPostStatus,
+  FacebookPage,
+  MediaAsset,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from './crypto.service';
 import { toPageDto } from './connections.service';
@@ -45,13 +56,18 @@ type PostRow = ContentPost & { page: FacebookPage | null };
 
 /** Kiểm tra giờ hẹn theo giới hạn của Facebook. */
 export function validateSchedule(scheduledAt: Date, now = new Date()): void {
-  if (Number.isNaN(scheduledAt.getTime())) throw new BadRequestException('Giờ hẹn không hợp lệ');
+  if (Number.isNaN(scheduledAt.getTime()))
+    throw new BadRequestException('Giờ hẹn không hợp lệ');
   const diff = scheduledAt.getTime() - now.getTime();
   if (diff < SCHEDULE_MIN_MINUTES * 60_000) {
-    throw new BadRequestException(`Facebook chỉ cho hẹn giờ sau ít nhất ${SCHEDULE_MIN_MINUTES} phút kể từ bây giờ`);
+    throw new BadRequestException(
+      `Facebook chỉ cho hẹn giờ sau ít nhất ${SCHEDULE_MIN_MINUTES} phút kể từ bây giờ`,
+    );
   }
   if (diff > SCHEDULE_MAX_DAYS * 86_400_000) {
-    throw new BadRequestException(`Facebook chỉ cho hẹn giờ trong vòng ${SCHEDULE_MAX_DAYS} ngày tới`);
+    throw new BadRequestException(
+      `Facebook chỉ cho hẹn giờ trong vòng ${SCHEDULE_MAX_DAYS} ngày tới`,
+    );
   }
 }
 
@@ -70,7 +86,10 @@ export class PostsService {
     private readonly media: MediaService,
   ) {}
 
-  async list(userId: string, status?: ContentPostStatus): Promise<ContentPostDto[]> {
+  async list(
+    userId: string,
+    status?: ContentPostStatus,
+  ): Promise<ContentPostDto[]> {
     await this.checkDueScheduled(userId);
     const rows = await this.prisma.contentPost.findMany({
       where: { userId, ...(status ? { status } : {}) },
@@ -83,28 +102,40 @@ export class PostsService {
 
   async get(userId: string, id: string): Promise<ContentPostDto> {
     const [dto] = await this.toDtos(userId, [await this.findRow(userId, id)]);
-    return dto!;
+    return dto;
   }
 
   async create(userId: string, input: SavePostInput): Promise<ContentPostDto> {
     const data = await this.validate(userId, input);
-    const row = await this.prisma.contentPost.create({ data: { ...data, userId } });
+    const row = await this.prisma.contentPost.create({
+      data: { ...data, userId },
+    });
     return this.get(userId, row.id);
   }
 
-  async update(userId: string, id: string, input: SavePostInput): Promise<ContentPostDto> {
+  async update(
+    userId: string,
+    id: string,
+    input: SavePostInput,
+  ): Promise<ContentPostDto> {
     const post = await this.findRow(userId, id);
     if (post.status !== 'DRAFT' && post.status !== 'FAILED') {
-      throw new ConflictException('Bài đã gửi lên Facebook, không sửa ở đây được nữa. Hãy sửa trực tiếp trên Page.');
+      throw new ConflictException(
+        'Bài đã gửi lên Facebook, không sửa ở đây được nữa. Hãy sửa trực tiếp trên Page.',
+      );
     }
-    await this.prisma.contentPost.update({ where: { id }, data: await this.validate(userId, input) });
+    await this.prisma.contentPost.update({
+      where: { id },
+      data: await this.validate(userId, input),
+    });
     return this.get(userId, id);
   }
 
   /** Chỉ xoá khỏi copee; bài đã đăng trên Facebook vẫn giữ nguyên. */
   async remove(userId: string, id: string): Promise<void> {
     const post = await this.findRow(userId, id);
-    if (post.status === 'PUBLISHING') throw new ConflictException('Bài đang được đăng, đợi xong rồi hãy xoá');
+    if (post.status === 'PUBLISHING')
+      throw new ConflictException('Bài đang được đăng, đợi xong rồi hãy xoá');
     await this.prisma.contentPost.delete({ where: { id } });
   }
 
@@ -112,11 +143,17 @@ export class PostsService {
    * Đăng ngay hoặc hẹn giờ. Ảnh được tải lên Page ở dạng chưa công khai rồi gắn vào bài,
    * nên bài nhiều ảnh hiện thành MỘT bài chứ không phải nhiều bài ảnh lẻ.
    */
-  async publish(userId: string, id: string, scheduledAtIso?: string | null): Promise<ContentPostDto> {
+  async publish(
+    userId: string,
+    id: string,
+    scheduledAtIso?: string | null,
+  ): Promise<ContentPostDto> {
     const post = await this.findRow(userId, id);
     if (!post.page) throw new BadRequestException('Bài chưa chọn Page để đăng');
     if (!toPageDto(post.page).canPublish) {
-      throw new ConflictException(`Tài khoản Facebook đã kết nối không có quyền đăng bài lên Page "${post.page.name}"`);
+      throw new ConflictException(
+        `Tài khoản Facebook đã kết nối không có quyền đăng bài lên Page "${post.page.name}"`,
+      );
     }
     const scheduledAt = scheduledAtIso ? new Date(scheduledAtIso) : undefined;
     if (scheduledAt) validateSchedule(scheduledAt);
@@ -128,12 +165,16 @@ export class PostsService {
         userId,
         OR: [
           { status: { in: ['DRAFT', 'FAILED'] } },
-          { status: 'PUBLISHING', updatedAt: { lt: new Date(Date.now() - PUBLISHING_STALE_MS) } },
+          {
+            status: 'PUBLISHING',
+            updatedAt: { lt: new Date(Date.now() - PUBLISHING_STALE_MS) },
+          },
         ],
       },
       data: { status: 'PUBLISHING', error: null },
     });
-    if (!claimed.count) throw new ConflictException('Bài này đã hoặc đang được đăng');
+    if (!claimed.count)
+      throw new ConflictException('Bài này đã hoặc đang được đăng');
 
     const page = post.page;
     try {
@@ -141,24 +182,46 @@ export class PostsService {
       const assets = await this.media.findMany(userId, post.mediaIds);
       const photoIds: string[] = [];
       for (const asset of assets) {
-        photoIds.push(await this.meta.uploadPagePhoto(page.externalId, token, await this.media.read(asset), Boolean(scheduledAt)));
+        photoIds.push(
+          await this.meta.uploadPagePhoto(
+            page.externalId,
+            token,
+            await this.media.read(asset),
+            Boolean(scheduledAt),
+          ),
+        );
       }
-      const externalPostId = await this.meta.publishPagePost(page.externalId, token, {
-        message: post.message,
-        link: post.link,
-        photoIds,
-        scheduledAt,
-      });
-      const permalink = scheduledAt ? null : await this.permalink(externalPostId, token);
+      const externalPostId = await this.meta.publishPagePost(
+        page.externalId,
+        token,
+        {
+          message: post.message,
+          link: post.link,
+          photoIds,
+          scheduledAt,
+        },
+      );
+      const permalink = scheduledAt
+        ? null
+        : await this.permalink(externalPostId, token);
       await this.prisma.contentPost.update({
         where: { id },
         data: scheduledAt
           ? { status: 'SCHEDULED', scheduledAt, externalPostId, error: null }
-          : { status: 'PUBLISHED', publishedAt: new Date(), externalPostId, permalink, error: null },
+          : {
+              status: 'PUBLISHED',
+              publishedAt: new Date(),
+              externalPostId,
+              permalink,
+              error: null,
+            },
       });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      await this.prisma.contentPost.update({ where: { id }, data: { status: 'FAILED', error: message.slice(0, 500) } });
+      await this.prisma.contentPost.update({
+        where: { id },
+        data: { status: 'FAILED', error: message.slice(0, 500) },
+      });
       throw e;
     }
     return this.get(userId, id);
@@ -180,29 +243,42 @@ export class PostsService {
     });
     for (const post of due) {
       await this.syncScheduled(post).catch((e) =>
-        this.logger.warn(`Không kiểm tra được bài hẹn giờ ${post.id}: ${e instanceof Error ? e.message : String(e)}`),
+        this.logger.warn(
+          `Không kiểm tra được bài hẹn giờ ${post.id}: ${e instanceof Error ? e.message : String(e)}`,
+        ),
       );
     }
   }
 
   private async syncScheduled(post: PostRow): Promise<void> {
     if (!post.page || !post.externalPostId) return;
-    const info = await this.meta.getPagePost(post.externalPostId, this.crypto.decrypt(post.page.encrypted));
+    const info = await this.meta.getPagePost(
+      post.externalPostId,
+      this.crypto.decrypt(post.page.encrypted),
+    );
     if (!info.is_published) return;
     await this.prisma.contentPost.update({
       where: { id: post.id },
       data: {
         status: 'PUBLISHED',
-        publishedAt: info.created_time ? new Date(info.created_time) : new Date(),
+        publishedAt: info.created_time
+          ? new Date(info.created_time)
+          : new Date(),
         permalink: info.permalink_url ?? null,
       },
     });
   }
 
   /** Link bài trên Facebook; lấy không được thì thôi, không làm hỏng việc đăng. */
-  private async permalink(externalPostId: string, token: string): Promise<string | null> {
+  private async permalink(
+    externalPostId: string,
+    token: string,
+  ): Promise<string | null> {
     try {
-      return (await this.meta.getPagePost(externalPostId, token)).permalink_url ?? null;
+      return (
+        (await this.meta.getPagePost(externalPostId, token)).permalink_url ??
+        null
+      );
     } catch {
       return null;
     }
@@ -211,15 +287,21 @@ export class PostsService {
   private async validate(userId: string, input: SavePostInput) {
     const message = (input.message ?? '').trim();
     const mediaIds = [...new Set(input.mediaIds ?? [])];
-    if (!message && !mediaIds.length) throw new BadRequestException('Bài viết cần có nội dung hoặc ảnh');
-    if (mediaIds.length > POST_MAX_IMAGES) throw new BadRequestException(`Mỗi bài tối đa ${POST_MAX_IMAGES} ảnh`);
+    if (!message && !mediaIds.length)
+      throw new BadRequestException('Bài viết cần có nội dung hoặc ảnh');
+    if (mediaIds.length > POST_MAX_IMAGES)
+      throw new BadRequestException(`Mỗi bài tối đa ${POST_MAX_IMAGES} ảnh`);
     await this.media.findMany(userId, mediaIds);
     if (input.pageId) {
-      const page = await this.prisma.facebookPage.findFirst({ where: { id: input.pageId, userId } });
+      const page = await this.prisma.facebookPage.findFirst({
+        where: { id: input.pageId, userId },
+      });
       if (!page) throw new NotFoundException('Không tìm thấy Page');
     }
     if (input.productId) {
-      const product = await this.prisma.product.findFirst({ where: { id: input.productId, userId } });
+      const product = await this.prisma.product.findFirst({
+        where: { id: input.productId, userId },
+      });
       if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
     }
     return {
@@ -232,14 +314,24 @@ export class PostsService {
   }
 
   private async findRow(userId: string, id: string): Promise<PostRow> {
-    const row = await this.prisma.contentPost.findFirst({ where: { id, userId }, include: { page: true } });
+    const row = await this.prisma.contentPost.findFirst({
+      where: { id, userId },
+      include: { page: true },
+    });
     if (!row) throw new NotFoundException('Không tìm thấy bài viết');
     return row;
   }
 
-  private async toDtos(userId: string, rows: PostRow[]): Promise<ContentPostDto[]> {
+  private async toDtos(
+    userId: string,
+    rows: PostRow[],
+  ): Promise<ContentPostDto[]> {
     const ids = [...new Set(rows.flatMap((r) => r.mediaIds))];
-    const assets = ids.length ? await this.prisma.mediaAsset.findMany({ where: { userId, id: { in: ids } } }) : [];
+    const assets = ids.length
+      ? await this.prisma.mediaAsset.findMany({
+          where: { userId, id: { in: ids } },
+        })
+      : [];
     const byId = new Map<string, MediaAsset>(assets.map((a) => [a.id, a]));
     return rows.map((r) => ({
       id: r.id,
