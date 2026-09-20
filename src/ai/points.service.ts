@@ -7,6 +7,8 @@ import { SettingsService } from '../settings/settings.service';
 export const AI_COSTS = {
   AI_POST_COST: 300,
   AI_IMAGE_COST: 2000,
+  /** Viết kịch bản video kể chuyện: chỉ tốn một lượt Gemini chữ, rẻ như viết bài. */
+  AI_VIDEO_SCRIPT_COST: 300,
 } as const;
 
 export type AiCostKey = keyof typeof AI_COSTS;
@@ -38,9 +40,14 @@ export class PointsService {
   async assertEnough(userId: string, key: AiCostKey): Promise<number> {
     const cost = await this.cost(key);
     if (cost === 0) return 0;
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { balance: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { balance: true },
+    });
     if (!user || user.balance < cost) {
-      throw new BadRequestException(`Số dư không đủ. Cần ${cost.toLocaleString('vi-VN')} điểm cho việc này.`);
+      throw new BadRequestException(
+        `Số dư không đủ. Cần ${cost.toLocaleString('vi-VN')} điểm cho việc này.`,
+      );
     }
     return cost;
   }
@@ -49,11 +56,18 @@ export class PointsService {
    * Trừ điểm sau khi làm xong. `reference` là khoá chống trừ trùng: gọi lại với cùng
    * reference (vd. khi thử lại) sẽ không trừ thêm lần nữa.
    */
-  async charge(userId: string, key: AiCostKey, reference: string, description: string): Promise<number> {
+  async charge(
+    userId: string,
+    key: AiCostKey,
+    reference: string,
+    description: string,
+  ): Promise<number> {
     const cost = await this.cost(key);
     if (cost === 0) return 0;
 
-    const already = await this.prisma.transaction.findFirst({ where: { userId, reference } });
+    const already = await this.prisma.transaction.findFirst({
+      where: { userId, reference },
+    });
     if (already) return cost;
 
     const updated = await this.prisma.user.updateMany({
@@ -62,8 +76,12 @@ export class PointsService {
     });
     if (!updated.count) {
       // Hiếm: số dư vừa bị tiêu hết bởi việc khác trong lúc AI đang chạy
-      this.logger.warn(`Không trừ được ${cost} điểm của ${userId} (${reference}): số dư không đủ`);
-      throw new BadRequestException(`Số dư không đủ. Cần ${cost.toLocaleString('vi-VN')} điểm cho việc này.`);
+      this.logger.warn(
+        `Không trừ được ${cost} điểm của ${userId} (${reference}): số dư không đủ`,
+      );
+      throw new BadRequestException(
+        `Số dư không đủ. Cần ${cost.toLocaleString('vi-VN')} điểm cho việc này.`,
+      );
     }
     await this.prisma.transaction.create({
       data: { userId, amount: -cost, type: 'DEBIT', reference, description },

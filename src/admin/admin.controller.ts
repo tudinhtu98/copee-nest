@@ -38,7 +38,12 @@ export class AdminController {
   @Roles(UserRole.ADMIN)
   @Audit('UPDATE_SETTINGS', 'Setting')
   updateSettings(
-    @Body() body: { videoEngine?: string; videoCost?: number },
+    @Body()
+    body: {
+      videoEngine?: string;
+      videoCost?: number;
+      storyEngine?: string;
+    },
   ) {
     return this.admin.updateVideoSettings(body);
   }
@@ -197,5 +202,3 @@ export class AdminController {
     });
   }
 }
-
-

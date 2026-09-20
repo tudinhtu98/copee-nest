@@ -74,13 +74,13 @@ Mỗi thư mục trong `src/` là một module Nest:
 | `auth`, `users`, `api-keys` | đăng nhập, JWT, API key cho extension và agent MCP |
 | `products`, `sites`, `shopee`, `upload` | sản phẩm copy về, đẩy lên WordPress |
 | `billing` | điểm và lịch sử giao dịch |
-| `video`, `video-bot` | dựng video sản phẩm, bot Telegram nhận video |
+| `video`, `video-bot` | dựng video sản phẩm + video kể chuyện, bot Telegram nhận video |
 | `social` | kết nối Facebook, thư viện ảnh, soạn/đăng/hẹn giờ bài fanpage |
 | `ai` | viết nội dung, tạo ảnh, trợ lý chat, MCP server |
 | `settings` | cấu hình sửa được trong trang admin (giá điểm, model video…) |
 | `admin`, `audit-log` | quản trị và nhật ký thao tác |
 
-### Ba quy ước phải biết trước khi sửa code
+### Bốn quy ước phải biết trước khi sửa code
 
 **1. Việc ghi của AI luôn đi qua đề xuất → xác nhận.**
 Trợ lý chat và agent MCP **không tự thực hiện** việc tốn điểm hay khó hoàn tác. Chúng
@@ -104,7 +104,21 @@ if (!claimed.count) throw new BadRequestException('Số dư không đủ');
 số dư cũ và tiêu quá tay. Đã từng dính: trừ 700 hai lần trên số dư 1000 đều qua, số dư
 còn −400. Có test giữ lại trong `src/billing/billing.service.spec.ts`.
 
-**3. Lỗi token Facebook phải trả 409, không phải 401.**
+**3. Video kể chuyện: AI viết kịch bản trước, người dùng duyệt rồi mới dựng.**
+Hai bước tách hẳn nhau vì chênh lệch chi phí rất lớn: `POST /ai/story/script` chỉ gọi
+Gemini chữ (rẻ, viết lại bao nhiêu lần cũng được), còn `POST /video/story` mới gọi Veo
+và trừ `VIDEO_COST` × số clip. **Đừng gộp hai bước** — người dùng phải nhìn thấy lời
+thoại trước khi mất tiền. Prompt gửi model nằm trong `src/video/story.prompt.ts` (hàm
+thuần, có test ở `story.spec.ts`), không rải chuỗi prompt trong service.
+
+Video 3 clip được nối bằng `ffmpeg-static` (`src/video/ffmpeg.util.ts`) — gói npm kèm
+sẵn binary nên máy chủ **không cần cài ffmpeg**, nhưng phải `npm ci` lại khi deploy.
+
+Ba thứ luôn bị ép trong code chứ không để AI tự quyết: khung dọc 9:16, **cấm mọi chữ
+trên hình** (Veo viết tiếng Việt sai dấu), và lời thoại đặt nguyên văn trong ngoặc kép
+để model khớp khẩu hình. Muốn có phụ đề thì chèn lúc đăng, đừng nhờ AI vẽ.
+
+**4. Lỗi token Facebook phải trả 409, không phải 401.**
 `MetaAuthError` kế thừa `ConflictException` (409) với mã `META_REAUTH_REQUIRED`. Trả
 401 thì giao diện tưởng phiên đăng nhập copee hết hạn và **đá người dùng ra màn hình
 đăng nhập**, dù thứ hết hạn chỉ là token Facebook.
