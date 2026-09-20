@@ -9,6 +9,7 @@ import { BillingModule } from '../billing/billing.module';
 import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { AuthModule } from '../auth/auth.module';
 import { ShopeeModule } from '../shopee/shopee.module';
+import { SocialModule } from '../social/social.module';
 
 @Module({
   imports: [
@@ -24,6 +25,8 @@ import { ShopeeModule } from '../shopee/shopee.module';
     ApiKeysModule,
     AuthModule,
     ShopeeModule,
+    // Thư viện ảnh: ảnh chân dung cho video kể chuyện nằm chung kho ảnh với bài đăng
+    SocialModule,
   ],
   controllers: [VideoController],
   providers: [VideoService, VideoProcessor, RenderService],

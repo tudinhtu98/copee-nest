@@ -198,4 +198,3 @@ export function removeVietnameseDiacritics(text: string): string {
     .map((char) => diacriticsMap[char] || char)
     .join('');
 }
-

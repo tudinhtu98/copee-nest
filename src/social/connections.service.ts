@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import type { FacebookPage, SocialConnection } from '@prisma/client';
@@ -31,7 +36,10 @@ export interface PageDto {
 
 export function toPageDto(p: FacebookPage): PageDto {
   // tasks rỗng = token cũ không trả tasks; coi như có quyền, để Facebook tự báo lỗi nếu không
-  const has = (task: string) => p.tasks.length === 0 || p.tasks.includes(task) || p.tasks.includes('MANAGE');
+  const has = (task: string) =>
+    p.tasks.length === 0 ||
+    p.tasks.includes(task) ||
+    p.tasks.includes('MANAGE');
   return {
     id: p.id,
     externalId: p.externalId,
@@ -62,12 +70,18 @@ export class ConnectionsService {
   authUrl(userId: string): string {
     const state = this.jwt.sign(
       { userId },
-      { secret: this.config.get('JWT_SECRET') || 'dev-secret', expiresIn: STATE_TTL_SECONDS },
+      {
+        secret: this.config.get('JWT_SECRET') || 'dev-secret',
+        expiresIn: STATE_TTL_SECONDS,
+      },
     );
     return this.meta.authUrl(state);
   }
 
-  async completeOAuth(code: string, state: string): Promise<{ userId: string }> {
+  async completeOAuth(
+    code: string,
+    state: string,
+  ): Promise<{ userId: string }> {
     let userId: string;
     try {
       const payload = this.jwt.verify<{ userId: string }>(state, {
@@ -75,26 +89,37 @@ export class ConnectionsService {
       });
       userId = payload.userId;
     } catch {
-      throw new BadRequestException('Phiên kết nối đã hết hạn, vui lòng thử lại');
+      throw new BadRequestException(
+        'Phiên kết nối đã hết hạn, vui lòng thử lại',
+      );
     }
     const shortLived = await this.meta.exchangeCode(code);
-    const token = await this.meta.exchangeLongLived(shortLived).catch(() => shortLived);
+    const token = await this.meta
+      .exchangeLongLived(shortLived)
+      .catch(() => shortLived);
     await this.save(userId, token);
     return { userId };
   }
 
   /** Luồng dán token thủ công (Graph API Explorer), dùng khi chưa cấu hình App ID/Secret. */
-  async connectWithToken(userId: string, rawToken: string): Promise<ConnectionDto> {
+  async connectWithToken(
+    userId: string,
+    rawToken: string,
+  ): Promise<ConnectionDto> {
     const token = rawToken.trim();
     if (token.length < 30) throw new BadRequestException('Token không hợp lệ');
-    const longLived = this.meta.configured ? await this.meta.exchangeLongLived(token).catch(() => token) : token;
+    const longLived = this.meta.configured
+      ? await this.meta.exchangeLongLived(token).catch(() => token)
+      : token;
     return this.save(userId, longLived);
   }
 
   private async save(userId: string, token: string): Promise<ConnectionDto> {
     const info = await this.meta.inspectToken(token);
     if (!info.scopes.includes('pages_show_list')) {
-      throw new BadRequestException('Token thiếu quyền quản lý Page (pages_show_list). Hãy cấp quyền rồi thử lại.');
+      throw new BadRequestException(
+        'Token thiếu quyền quản lý Page (pages_show_list). Hãy cấp quyền rồi thử lại.',
+      );
     }
     const profile = await this.meta.me(token);
     const externalUserId = info.userId || profile.id;
@@ -107,7 +132,13 @@ export class ConnectionsService {
       lastError: null,
     };
     const connection = await this.prisma.socialConnection.upsert({
-      where: { userId_platform_externalUserId: { userId, platform: 'FACEBOOK', externalUserId } },
+      where: {
+        userId_platform_externalUserId: {
+          userId,
+          platform: 'FACEBOOK',
+          externalUserId,
+        },
+      },
       update: data,
       create: { ...data, userId, platform: 'FACEBOOK', externalUserId },
     });
@@ -119,7 +150,10 @@ export class ConnectionsService {
    * Lưu danh sách Page kèm Page access token. Lỗi ở đây không làm hỏng việc kết nối:
    * người dùng vẫn kết nối xong, chỉ là chưa thấy Page nào.
    */
-  async syncPages(connection: SocialConnection, token: string): Promise<number> {
+  async syncPages(
+    connection: SocialConnection,
+    token: string,
+  ): Promise<number> {
     try {
       const pages = await this.meta.listPages(token);
       const seen: string[] = [];
@@ -135,18 +169,29 @@ export class ConnectionsService {
           tasks: page.tasks ?? [],
         };
         await this.prisma.facebookPage.upsert({
-          where: { userId_externalId: { userId: connection.userId, externalId: page.id } },
+          where: {
+            userId_externalId: {
+              userId: connection.userId,
+              externalId: page.id,
+            },
+          },
           update: data,
           create: { ...data, userId: connection.userId, externalId: page.id },
         });
       }
       // Page không còn quản lý qua kết nối này thì gỡ khỏi danh sách
       await this.prisma.facebookPage.deleteMany({
-        where: { userId: connection.userId, connectionId: connection.id, externalId: { notIn: seen } },
+        where: {
+          userId: connection.userId,
+          connectionId: connection.id,
+          externalId: { notIn: seen },
+        },
       });
       return seen.length;
     } catch (e) {
-      this.logger.warn(`Không tải được danh sách Page: ${e instanceof Error ? e.message : String(e)}`);
+      this.logger.warn(
+        `Không tải được danh sách Page: ${e instanceof Error ? e.message : String(e)}`,
+      );
       return 0;
     }
   }
@@ -170,27 +215,42 @@ export class ConnectionsService {
   }
 
   async pages(userId: string): Promise<PageDto[]> {
-    const rows = await this.prisma.facebookPage.findMany({ where: { userId }, orderBy: { name: 'asc' } });
+    const rows = await this.prisma.facebookPage.findMany({
+      where: { userId },
+      orderBy: { name: 'asc' },
+    });
     return rows.map(toPageDto);
   }
 
   /** Tải lại danh sách Page từ Facebook cho mọi kết nối đang hoạt động. */
   async refreshPages(userId: string): Promise<PageDto[]> {
-    const connections = await this.prisma.socialConnection.findMany({ where: { userId, status: 'ACTIVE' } });
+    const connections = await this.prisma.socialConnection.findMany({
+      where: { userId, status: 'ACTIVE' },
+    });
     for (const connection of connections) {
-      await this.syncPages(connection, this.crypto.decrypt(connection.encrypted));
+      await this.syncPages(
+        connection,
+        this.crypto.decrypt(connection.encrypted),
+      );
     }
     return this.pages(userId);
   }
 
   async disconnect(userId: string, id: string): Promise<void> {
-    const { count } = await this.prisma.socialConnection.deleteMany({ where: { id, userId } });
+    const { count } = await this.prisma.socialConnection.deleteMany({
+      where: { id, userId },
+    });
     if (!count) throw new NotFoundException('Không tìm thấy kết nối');
   }
 
   /** Page kèm token đã giải mã, dùng cho các thao tác gọi Facebook. */
-  async pageWithToken(userId: string, pageId: string): Promise<{ page: FacebookPage; token: string }> {
-    const page = await this.prisma.facebookPage.findFirst({ where: { id: pageId, userId } });
+  async pageWithToken(
+    userId: string,
+    pageId: string,
+  ): Promise<{ page: FacebookPage; token: string }> {
+    const page = await this.prisma.facebookPage.findFirst({
+      where: { id: pageId, userId },
+    });
     if (!page) throw new NotFoundException('Không tìm thấy Page');
     return { page, token: this.crypto.decrypt(page.encrypted) };
   }
@@ -204,7 +264,9 @@ export class ConnectionsService {
   }
 
   private async toDto(id: string): Promise<ConnectionDto> {
-    const row = await this.prisma.socialConnection.findUniqueOrThrow({ where: { id } });
+    const row = await this.prisma.socialConnection.findUniqueOrThrow({
+      where: { id },
+    });
     const dto = (await this.list(row.userId)).find((c) => c.id === id);
     if (!dto) throw new NotFoundException('Không đọc được kết nối vừa lưu');
     return dto;

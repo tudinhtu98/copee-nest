@@ -61,7 +61,10 @@ export class ChatService {
   async listConversations(userId: string): Promise<ConversationDto[]> {
     const rows = await this.prisma.conversation.findMany({
       where: { userId },
-      include: { _count: { select: { messages: true } }, messages: { orderBy: { createdAt: 'desc' }, take: 1 } },
+      include: {
+        _count: { select: { messages: true } },
+        messages: { orderBy: { createdAt: 'desc' }, take: 1 },
+      },
       orderBy: { updatedAt: 'desc' },
       take: 50,
     });
@@ -75,11 +78,22 @@ export class ChatService {
   }
 
   async createConversation(userId: string): Promise<ConversationDto> {
-    const row = await this.prisma.conversation.create({ data: { userId, title: 'Cuộc trò chuyện mới' } });
-    return { id: row.id, title: row.title, messageCount: 0, lastMessageAt: null, createdAt: row.createdAt.toISOString() };
+    const row = await this.prisma.conversation.create({
+      data: { userId, title: 'Cuộc trò chuyện mới' },
+    });
+    return {
+      id: row.id,
+      title: row.title,
+      messageCount: 0,
+      lastMessageAt: null,
+      createdAt: row.createdAt.toISOString(),
+    };
   }
 
-  async detail(userId: string, id: string): Promise<ConversationDto & { messages: ChatMessageDto[] }> {
+  async detail(
+    userId: string,
+    id: string,
+  ): Promise<ConversationDto & { messages: ChatMessageDto[] }> {
     const conversation = await this.find(userId, id);
     const messages = await this.prisma.chatMessage.findMany({
       where: { conversationId: id },
@@ -105,7 +119,11 @@ export class ChatService {
    * Một lượt hỏi đáp: AI gọi công cụ để lấy dữ liệu thật (tối đa MAX_TOOL_ROUNDS vòng) rồi trả lời.
    * Công cụ tạo đề xuất sẽ được gắn vào câu trả lời để người dùng bấm Xác nhận.
    */
-  async send(userId: string, conversationId: string, message: string): Promise<{ message: ChatMessageDto }> {
+  async send(
+    userId: string,
+    conversationId: string,
+    message: string,
+  ): Promise<{ message: ChatMessageDto }> {
     const conversation = await this.find(userId, conversationId);
     const history = await this.prisma.chatMessage.findMany({
       where: { conversationId },
@@ -113,7 +131,9 @@ export class ChatService {
       orderBy: { createdAt: 'asc' },
       take: HISTORY_LIMIT,
     });
-    await this.prisma.chatMessage.create({ data: { conversationId, role: 'user', content: message } });
+    await this.prisma.chatMessage.create({
+      data: { conversationId, role: 'user', content: message },
+    });
 
     const contents: GeminiContent[] = [
       ...history.map((m) => ({
@@ -131,55 +151,97 @@ export class ChatService {
     let answer = '';
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-      const turn = await this.gemini.chat({ system: systemPrompt(new Date().toLocaleDateString('vi-VN')), contents, tools: definitions });
+      const turn = await this.gemini.chat({
+        system: systemPrompt(new Date().toLocaleDateString('vi-VN')),
+        contents,
+        tools: definitions,
+      });
       if (turn.text) answer = turn.text;
       if (!turn.calls.length) break;
 
       // Lượt của model phải giữ nguyên văn trong lịch sử trước khi gửi kết quả công cụ
-      contents.push(turn.content ?? { role: 'model', parts: turn.calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) });
+      contents.push(
+        turn.content ?? {
+          role: 'model',
+          parts: turn.calls.map((c) => ({
+            functionCall: { name: c.name, args: c.args },
+          })),
+        },
+      );
 
-      const responses: { functionResponse: { name: string; response: unknown } }[] = [];
+      const responses: {
+        functionResponse: { name: string; response: unknown };
+      }[] = [];
       for (const call of turn.calls) {
         try {
           const result = await this.tools.execute(call.name, call.args, actor);
           toolCalls.push({ name: call.name, summary: result.summary });
           if (result.actionId) actionIds.push(result.actionId);
           if (result.cost) cost += result.cost;
-          responses.push({ functionResponse: { name: call.name, response: { output: result.data } } });
+          responses.push({
+            functionResponse: {
+              name: call.name,
+              response: { output: result.data },
+            },
+          });
         } catch (e) {
           const detail = e instanceof Error ? e.message : String(e);
           this.logger.warn(`Công cụ ${call.name} lỗi: ${detail}`);
           // Ghi cả lần gọi lỗi để người dùng thấy, tránh trường hợp AI nói "đã làm" mà thực ra hỏng
-          toolCalls.push({ name: call.name, summary: `lỗi: ${detail.slice(0, 120)}` });
-          responses.push({ functionResponse: { name: call.name, response: { error: detail } } });
+          toolCalls.push({
+            name: call.name,
+            summary: `lỗi: ${detail.slice(0, 120)}`,
+          });
+          responses.push({
+            functionResponse: { name: call.name, response: { error: detail } },
+          });
         }
       }
       contents.push({ role: 'user', parts: responses });
     }
 
-    if (!answer) answer = 'Mình chưa lấy được dữ liệu để trả lời. Bạn thử hỏi cụ thể hơn nhé.';
+    if (!answer)
+      answer =
+        'Mình chưa lấy được dữ liệu để trả lời. Bạn thử hỏi cụ thể hơn nhé.';
 
     const saved = await this.prisma.chatMessage.create({
-      data: { conversationId, role: 'assistant', content: answer, toolCalls: toolCalls as object, cost },
+      data: {
+        conversationId,
+        role: 'assistant',
+        content: answer,
+        toolCalls: toolCalls as object,
+        cost,
+      },
     });
     if (actionIds.length) {
-      await this.prisma.aiAction.updateMany({ where: { id: { in: actionIds }, userId }, data: { chatMessageId: saved.id } });
+      await this.prisma.aiAction.updateMany({
+        where: { id: { in: actionIds }, userId },
+        data: { chatMessageId: saved.id },
+      });
     }
     const actions = actionIds.length
-      ? await this.prisma.aiAction.findMany({ where: { chatMessageId: saved.id }, orderBy: { createdAt: 'asc' } })
+      ? await this.prisma.aiAction.findMany({
+          where: { chatMessageId: saved.id },
+          orderBy: { createdAt: 'asc' },
+        })
       : [];
 
     // Đặt tên cuộc trò chuyện theo câu hỏi đầu tiên
     await this.prisma.conversation.update({
       where: { id: conversationId },
-      data: conversation.title === 'Cuộc trò chuyện mới' ? { title: message.slice(0, 60) } : { updatedAt: new Date() },
+      data:
+        conversation.title === 'Cuộc trò chuyện mới'
+          ? { title: message.slice(0, 60) }
+          : { updatedAt: new Date() },
     });
 
     return { message: toMessageDto({ ...saved, actions }) };
   }
 
   private async find(userId: string, id: string): Promise<Conversation> {
-    const row = await this.prisma.conversation.findFirst({ where: { id, userId } });
+    const row = await this.prisma.conversation.findFirst({
+      where: { id, userId },
+    });
     if (!row) throw new NotFoundException('Không tìm thấy cuộc trò chuyện');
     return row;
   }
@@ -198,12 +260,15 @@ function withActionOutcome(m: ChatMessage & { actions: AiAction[] }): string {
   return `${m.content}\n\n${notes.join('\n')}`;
 }
 
-function toMessageDto(m: ChatMessage & { actions?: AiAction[] }): ChatMessageDto {
+function toMessageDto(
+  m: ChatMessage & { actions?: AiAction[] },
+): ChatMessageDto {
   return {
     id: m.id,
     role: m.role as 'user' | 'assistant',
     content: m.content,
-    toolCalls: (m.toolCalls as unknown as { name: string; summary: string }[]) ?? [],
+    toolCalls:
+      (m.toolCalls as unknown as { name: string; summary: string }[]) ?? [],
     actions: (m.actions ?? []).map((a) => toActionDto(a)),
     cost: m.cost,
     createdAt: m.createdAt.toISOString(),

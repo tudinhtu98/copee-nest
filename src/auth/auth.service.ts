@@ -33,7 +33,9 @@ export class AuthService {
 
       // Validate input
       if (!email || !username || !password) {
-        throw new BadRequestException('Email, username và password là bắt buộc');
+        throw new BadRequestException(
+          'Email, username và password là bắt buộc',
+        );
       }
 
       if (password.length < 6) {
@@ -52,7 +54,11 @@ export class AuthService {
       const passwordHash = await bcrypt.hash(password, 10);
 
       // Create user
-      const user = await this.users.createUser({ email, username, passwordHash });
+      const user = await this.users.createUser({
+        email,
+        username,
+        passwordHash,
+      });
       this.events.emit(NotifyEvents.UserCreated, {
         username: user.username,
         email: user.email,
@@ -90,22 +96,22 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Sai thông tin');
     const ok = await bcrypt.compare(password, (user as any).passwordHash || '');
     if (!ok) throw new UnauthorizedException('Sai thông tin');
-    
+
     const payload = {
       sub: (user as any).id,
       email: (user as any).email,
       role: (user as any).role,
       username: (user as any).username,
     };
-    
+
     // Tạo access token (15 phút)
     const accessToken = await this.jwt.signAsync(payload);
-    
+
     // Tạo refresh token (30 ngày)
     const refreshToken = crypto.randomBytes(64).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 ngày
-    
+
     // Lưu refresh token vào database
     await this.prisma.refreshToken.create({
       data: {
@@ -114,7 +120,7 @@ export class AuthService {
         expiresAt,
       },
     });
-    
+
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
@@ -392,7 +398,9 @@ export class AuthService {
 
     // Chỉ cho phép set password nếu user chưa có password (OAuth users)
     if (user.passwordHash) {
-      throw new BadRequestException('User đã có mật khẩu. Vui lòng sử dụng chức năng đổi mật khẩu.');
+      throw new BadRequestException(
+        'User đã có mật khẩu. Vui lòng sử dụng chức năng đổi mật khẩu.',
+      );
     }
 
     if (password.length < 6) {

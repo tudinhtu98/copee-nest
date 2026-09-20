@@ -1,12 +1,27 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import type { Product } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MediaService, type MediaAssetDto } from '../social/media.service';
 import { GeminiClient } from './gemini.client';
 import { PointsService } from './points.service';
 
-export const CONTENT_TONES = ['friendly', 'professional', 'urgent', 'playful', 'luxury'] as const;
-export const CONTENT_GOALS = ['messages', 'engagement', 'traffic', 'awareness'] as const;
+export const CONTENT_TONES = [
+  'friendly',
+  'professional',
+  'urgent',
+  'playful',
+  'luxury',
+] as const;
+export const CONTENT_GOALS = [
+  'messages',
+  'engagement',
+  'traffic',
+  'awareness',
+] as const;
 export const IMAGE_ASPECT_RATIOS = ['1:1', '4:5', '9:16', '16:9'] as const;
 
 export type ContentTone = (typeof CONTENT_TONES)[number];
@@ -82,9 +97,13 @@ export function parseVariants(text: string): string[] {
   const end = text.lastIndexOf('}');
   if (start >= 0 && end > start) {
     try {
-      const parsed = JSON.parse(text.slice(start, end + 1)) as { variants?: unknown };
+      const parsed = JSON.parse(text.slice(start, end + 1)) as {
+        variants?: unknown;
+      };
       if (Array.isArray(parsed.variants)) {
-        const variants = parsed.variants.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        const variants = parsed.variants.filter(
+          (v): v is string => typeof v === 'string' && v.trim().length > 0,
+        );
         if (variants.length) return variants.map((v) => v.trim());
       }
     } catch {
@@ -98,18 +117,27 @@ export function parseVariants(text: string): string[] {
 /** Ảnh sản phẩm lưu dạng mảng link trong cột images. */
 export function productImages(product: Pick<Product, 'images'>): string[] {
   const raw = product.images as unknown;
-  return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
+  return Array.isArray(raw)
+    ? raw.filter((x): x is string => typeof x === 'string')
+    : [];
 }
 
 /** Mô tả sản phẩm cho AI đọc: chỉ những gì thật sự có trong DB. */
 export function describeProduct(product: Product): string {
-  const money = (v: number | null) => (v === null ? null : `${v.toLocaleString('vi-VN')}${product.currency ?? 'đ'}`);
+  const money = (v: number | null) =>
+    v === null
+      ? null
+      : `${v.toLocaleString('vi-VN')}${product.currency ?? 'đ'}`;
   return [
     `Tên sản phẩm: ${product.title}`,
     product.category ? `Ngành hàng: ${product.category}` : '',
     money(product.price) ? `Giá bán: ${money(product.price)}` : '',
-    money(product.originalPrice) && product.originalPrice !== product.price ? `Giá gốc: ${money(product.originalPrice)}` : '',
-    product.description ? `Mô tả từ người bán:\n${product.description.slice(0, 2000)}` : '',
+    money(product.originalPrice) && product.originalPrice !== product.price
+      ? `Giá gốc: ${money(product.originalPrice)}`
+      : '',
+    product.description
+      ? `Mô tả từ người bán:\n${product.description.slice(0, 2000)}`
+      : '',
   ]
     .filter(Boolean)
     .join('\n');
@@ -120,7 +148,9 @@ function imagePrompt(prompt: string, hasReference: boolean): string {
   return [
     prompt.trim(),
     '',
-    hasReference ? 'Dùng sản phẩm trong ảnh đính kèm làm chủ thể, giữ nguyên hình dáng, màu sắc, logo và chữ trên sản phẩm.' : '',
+    hasReference
+      ? 'Dùng sản phẩm trong ảnh đính kèm làm chủ thể, giữ nguyên hình dáng, màu sắc, logo và chữ trên sản phẩm.'
+      : '',
     'Ảnh quảng cáo chất lượng cao, ánh sáng đẹp, bố cục rõ chủ thể, phù hợp đăng Facebook.',
     'Không tự thêm chữ, logo hay watermark trừ khi được yêu cầu rõ.',
   ]
@@ -138,48 +168,80 @@ export class ContentService {
     private readonly media: MediaService,
   ) {}
 
-  async writePost(userId: string, input: WritePostInput): Promise<WritePostResult> {
-    const product = input.productId ? await this.findProduct(userId, input.productId) : null;
+  async writePost(
+    userId: string,
+    input: WritePostInput,
+  ): Promise<WritePostResult> {
+    const product = input.productId
+      ? await this.findProduct(userId, input.productId)
+      : null;
     const brief = (input.brief ?? '').trim();
     if (!product && brief.length < 5) {
-      throw new BadRequestException('Cần mô tả sản phẩm (ít nhất 5 ký tự) hoặc chọn một sản phẩm đã copy');
+      throw new BadRequestException(
+        'Cần mô tả sản phẩm (ít nhất 5 ký tự) hoặc chọn một sản phẩm đã copy',
+      );
     }
     await this.points.assertEnough(userId, 'AI_POST_COST');
 
     const images: { mimeType: string; base64: string }[] = [];
     if (input.mediaId) {
       const asset = await this.media.find(userId, input.mediaId);
-      images.push({ mimeType: asset.mimeType, base64: (await this.media.read(asset)).toString('base64') });
+      images.push({
+        mimeType: asset.mimeType,
+        base64: (await this.media.read(asset)).toString('base64'),
+      });
     }
 
     const count = Math.min(Math.max(input.variants ?? 3, 1), 3);
-    const link = input.includeLink !== false ? (product?.affiliateUrl ?? product?.sourceUrl ?? null) : null;
+    const link =
+      input.includeLink !== false
+        ? (product?.affiliateUrl ?? product?.sourceUrl ?? null)
+        : null;
     const prompt = [
       `Viết ${count} phương án bài đăng Facebook.`,
-      product ? `Thông tin sản phẩm:\n${describeProduct(product)}` : `Thông tin từ người bán:\n${brief}`,
+      product
+        ? `Thông tin sản phẩm:\n${describeProduct(product)}`
+        : `Thông tin từ người bán:\n${brief}`,
       product && brief ? `Yêu cầu thêm của người bán: ${brief}` : '',
       `Văn phong: ${TONE_LABEL[input.tone]}.`,
       `Mục tiêu bài viết: ${GOAL_LABEL[input.goal]}.`,
-      link ? 'Bài sẽ kèm link mua hàng, hãy mời khách bấm vào link ở cuối bài (KHÔNG tự viết link ra).' : '',
-      images.length ? 'Ảnh sản phẩm đính kèm: chỉ mô tả những gì nhìn thấy, không suy diễn thêm.' : '',
+      link
+        ? 'Bài sẽ kèm link mua hàng, hãy mời khách bấm vào link ở cuối bài (KHÔNG tự viết link ra).'
+        : '',
+      images.length
+        ? 'Ảnh sản phẩm đính kèm: chỉ mô tả những gì nhìn thấy, không suy diễn thêm.'
+        : '',
     ]
       .filter(Boolean)
       .join('\n\n');
 
-    const text = await this.gemini.generateText({ system: WRITE_SYSTEM, prompt, images, maxOutputTokens: 4096 });
+    const text = await this.gemini.generateText({
+      system: WRITE_SYSTEM,
+      prompt,
+      images,
+      maxOutputTokens: 4096,
+    });
     const variants = parseVariants(text).slice(0, count);
-    if (!variants.length) throw new BadRequestException('AI không trả về nội dung dùng được, thử lại nhé.');
+    if (!variants.length)
+      throw new BadRequestException(
+        'AI không trả về nội dung dùng được, thử lại nhé.',
+      );
 
     const cost = await this.points.charge(
       userId,
       'AI_POST_COST',
       `ai-post:${userId}:${Date.now()}`,
-      product ? `AI viết bài cho "${product.title.slice(0, 60)}"` : 'AI viết bài Facebook',
+      product
+        ? `AI viết bài cho "${product.title.slice(0, 60)}"`
+        : 'AI viết bài Facebook',
     );
     return { variants, link, cost };
   }
 
-  async generateImage(userId: string, input: GenerateImageInput): Promise<{ asset: MediaAssetDto; cost: number }> {
+  async generateImage(
+    userId: string,
+    input: GenerateImageInput,
+  ): Promise<{ asset: MediaAssetDto; cost: number }> {
     await this.points.assertEnough(userId, 'AI_IMAGE_COST');
 
     // Ảnh gốc: lấy từ thư viện, hoặc tự tải ảnh đầu tiên của sản phẩm về thư viện
@@ -187,15 +249,28 @@ export class ContentService {
     let productId = input.productId;
     if (input.referenceMediaId) {
       const asset = await this.media.find(userId, input.referenceMediaId);
-      reference = { mimeType: asset.mimeType, base64: (await this.media.read(asset)).toString('base64') };
+      reference = {
+        mimeType: asset.mimeType,
+        base64: (await this.media.read(asset)).toString('base64'),
+      };
       productId = productId ?? asset.productId ?? undefined;
     } else if (input.productId) {
       const product = await this.findProduct(userId, input.productId);
       const [first] = productImages(product);
-      if (!first) throw new BadRequestException('Sản phẩm này chưa có ảnh để làm ảnh gốc');
-      const imported = await this.media.importFromUrl(userId, first, product.id);
+      if (!first)
+        throw new BadRequestException(
+          'Sản phẩm này chưa có ảnh để làm ảnh gốc',
+        );
+      const imported = await this.media.importFromUrl(
+        userId,
+        first,
+        product.id,
+      );
       const asset = await this.media.find(userId, imported.id);
-      reference = { mimeType: asset.mimeType, base64: (await this.media.read(asset)).toString('base64') };
+      reference = {
+        mimeType: asset.mimeType,
+        base64: (await this.media.read(asset)).toString('base64'),
+      };
     }
 
     const result = await this.gemini.generateImage({
@@ -215,20 +290,35 @@ export class ContentService {
       model: result.model,
       ...(productId ? { productId } : {}),
     });
-    const cost = await this.points.charge(userId, 'AI_IMAGE_COST', `ai-image:${asset.id}`, 'AI tạo ảnh');
+    const cost = await this.points.charge(
+      userId,
+      'AI_IMAGE_COST',
+      `ai-image:${asset.id}`,
+      'AI tạo ảnh',
+    );
     return { asset, cost };
   }
 
   /** Bảng giá hiện tại, để giao diện hiện trước khi bấm. */
-  async prices(): Promise<{ post: number; image: number }> {
+  async prices(): Promise<{
+    post: number;
+    image: number;
+    videoScript: number;
+  }> {
     return {
       post: await this.points.cost('AI_POST_COST'),
       image: await this.points.cost('AI_IMAGE_COST'),
+      videoScript: await this.points.cost('AI_VIDEO_SCRIPT_COST'),
     };
   }
 
-  private async findProduct(userId: string, productId: string): Promise<Product> {
-    const product = await this.prisma.product.findFirst({ where: { id: productId, userId } });
+  private async findProduct(
+    userId: string,
+    productId: string,
+  ): Promise<Product> {
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, userId },
+    });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm');
     return product;
   }

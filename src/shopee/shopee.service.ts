@@ -45,7 +45,9 @@ export class ShopeeService {
 
     const result = buildShopeeAffiliateLink(url, affiliateId, params.subId);
     if (!result) {
-      throw new BadRequestException('Không tạo được link affiliate từ link này');
+      throw new BadRequestException(
+        'Không tạo được link affiliate từ link này',
+      );
     }
     return result;
   }

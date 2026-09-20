@@ -80,7 +80,6 @@ export class SitesController {
     return this.sites.remove(req.user.userId, id);
   }
 
-
   @Post(':siteId/categories/sync')
   syncCategories(
     @Req() req: AuthenticatedRequest,
@@ -127,5 +126,3 @@ export class SitesController {
     return this.sites.testConnection(req.user.userId, siteId);
   }
 }
-
-

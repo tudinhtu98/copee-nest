@@ -21,9 +21,8 @@ export class ApiKeyGuard implements CanActivate {
     const apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
 
     try {
-      const { userId, permissions } = await this.apiKeysService.validateApiKey(
-        apiKey,
-      );
+      const { userId, permissions } =
+        await this.apiKeysService.validateApiKey(apiKey);
 
       // Attach user info to request
       request.user = {
@@ -38,4 +37,3 @@ export class ApiKeyGuard implements CanActivate {
     }
   }
 }
-

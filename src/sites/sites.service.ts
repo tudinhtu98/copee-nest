@@ -50,7 +50,13 @@ export class SitesService {
       wpApplicationPassword?: string;
     },
   ) {
-    const { baseUrl, wooConsumerKey, wooConsumerSecret, wpUsername, wpApplicationPassword } = input;
+    const {
+      baseUrl,
+      wooConsumerKey,
+      wooConsumerSecret,
+      wpUsername,
+      wpApplicationPassword,
+    } = input;
 
     // 1. Normalize baseUrl (remove trailing slash, convert to lowercase)
     const normalizedUrl = baseUrl.trim().replace(/\/$/, '').toLowerCase();
@@ -163,7 +169,10 @@ export class SitesService {
     }
     if (input.baseUrl !== undefined) {
       // Normalize baseUrl consistent with create()
-      updateData.baseUrl = input.baseUrl.trim().replace(/\/$/, '').toLowerCase();
+      updateData.baseUrl = input.baseUrl
+        .trim()
+        .replace(/\/$/, '')
+        .toLowerCase();
     }
     // wooConsumerKey/Secret are required (non-nullable) columns, so only
     // overwrite when a non-empty value is provided.
@@ -204,7 +213,6 @@ export class SitesService {
 
     return { removed: 1 };
   }
-
 
   async syncWooCommerceCategories(userId: string, siteId: string) {
     const site = await this.prisma.site.findFirst({
@@ -247,7 +255,7 @@ export class SitesService {
 
         const categories = await response.json();
         allCategories = allCategories.concat(categories);
-        
+
         // Check if there are more pages
         hasMore = categories.length === 100;
         page++;
@@ -402,17 +410,18 @@ export class SitesService {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      throw new BadRequestException(
-        `Lỗi khi tạo category: ${error.message}`,
-      );
+      throw new BadRequestException(`Lỗi khi tạo category: ${error.message}`);
     }
   }
 
-  async testCredentials(userId: string, input: {
-    baseUrl: string;
-    wpUsername: string;
-    wpApplicationPassword: string;
-  }) {
+  async testCredentials(
+    userId: string,
+    input: {
+      baseUrl: string;
+      wpUsername: string;
+      wpApplicationPassword: string;
+    },
+  ) {
     const { baseUrl, wpUsername, wpApplicationPassword } = input;
 
     // Kiểm tra URL đã được user khác đăng ký chưa
@@ -427,7 +436,8 @@ export class SitesService {
     if (existingSite) {
       return {
         success: false,
-        message: 'URL này đã được đăng ký bởi tài khoản khác. Mỗi WordPress site chỉ có thể liên kết với 1 tài khoản.',
+        message:
+          'URL này đã được đăng ký bởi tài khoản khác. Mỗi WordPress site chỉ có thể liên kết với 1 tài khoản.',
       };
     }
 
@@ -465,9 +475,9 @@ export class SitesService {
   }
 
   async testConnection(userId: string, siteId: string) {
-    const site = await this.prisma.site.findFirst({
+    const site = (await this.prisma.site.findFirst({
       where: { id: siteId, userId },
-    }) as any;
+    })) as any;
     if (!site) {
       throw new NotFoundException('Site không tồn tại');
     }
@@ -488,7 +498,7 @@ export class SitesService {
           `${site.wooConsumerKey}:${site.wooConsumerSecret}`,
         ).toString('base64');
         const endpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wc/v3/system_status`;
-        
+
         const response = await fetch(endpoint, {
           headers: {
             Authorization: `Basic ${auth}`,
@@ -564,5 +574,3 @@ export class SitesService {
     return results;
   }
 }
-
-

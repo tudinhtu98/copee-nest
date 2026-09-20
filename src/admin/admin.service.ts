@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { SettingsService } from '../settings/settings.service';
@@ -17,20 +22,45 @@ export class AdminService {
 
   /** Cấu hình video (engine + chi phí) cho trang admin. */
   async getVideoSettings() {
-    const s = await this.settings.getMany(['VIDEO_ENGINE', 'VIDEO_COST']);
+    const s = await this.settings.getMany([
+      'VIDEO_ENGINE',
+      'VIDEO_COST',
+      'STORY_ENGINE',
+    ]);
     return {
-      videoEngine: (s.VIDEO_ENGINE || process.env.VIDEO_ENGINE || 'omni').toLowerCase(),
+      videoEngine: (
+        s.VIDEO_ENGINE ||
+        process.env.VIDEO_ENGINE ||
+        'omni'
+      ).toLowerCase(),
       videoCost: parseInt(s.VIDEO_COST || process.env.VIDEO_COST || '5000', 10),
+      // Video kể chuyện mặc định dùng Veo: Veo sinh được lời thoại kèm khẩu hình.
+      storyEngine: (
+        s.STORY_ENGINE ||
+        process.env.STORY_ENGINE ||
+        'veo'
+      ).toLowerCase(),
     };
   }
 
-  async updateVideoSettings(body: { videoEngine?: string; videoCost?: number }) {
+  async updateVideoSettings(body: {
+    videoEngine?: string;
+    videoCost?: number;
+    storyEngine?: string;
+  }) {
     if (body.videoEngine !== undefined) {
       const e = String(body.videoEngine).toLowerCase();
       if (!['omni', 'veo'].includes(e)) {
         throw new BadRequestException("Engine phải là 'omni' hoặc 'veo'");
       }
       await this.settings.set('VIDEO_ENGINE', e);
+    }
+    if (body.storyEngine !== undefined) {
+      const e = String(body.storyEngine).toLowerCase();
+      if (!['omni', 'veo'].includes(e)) {
+        throw new BadRequestException("Engine phải là 'omni' hoặc 'veo'");
+      }
+      await this.settings.set('STORY_ENGINE', e);
     }
     if (body.videoCost !== undefined) {
       const c = Number(body.videoCost);
@@ -170,20 +200,27 @@ export class AdminService {
 
     const countValue = (count: unknown): number => {
       if (!count || typeof count === 'boolean') return 0;
-      if (typeof count === 'object' && '_all' in (count as Record<string, number | undefined>)) {
+      if (
+        typeof count === 'object' &&
+        '_all' in (count as Record<string, number | undefined>)
+      ) {
         return (count as Record<string, number | undefined>)._all ?? 0;
       }
       return 0;
     };
 
-    const sortedUsers = [...topUsersRaw]
-      .sort((a, b) => (a._sum?.amount ?? 0) - (b._sum?.amount ?? 0));
-    const sortedSites = [...topSitesRaw]
-      .sort((a, b) => countValue(b._count) - countValue(a._count));
-    const sortedProducts = [...topProductsRaw]
-      .sort((a, b) => countValue(b._count) - countValue(a._count));
-    const sortedCategories = [...topCategoriesRaw]
-      .sort((a, b) => countValue(b._count) - countValue(a._count));
+    const sortedUsers = [...topUsersRaw].sort(
+      (a, b) => (a._sum?.amount ?? 0) - (b._sum?.amount ?? 0),
+    );
+    const sortedSites = [...topSitesRaw].sort(
+      (a, b) => countValue(b._count) - countValue(a._count),
+    );
+    const sortedProducts = [...topProductsRaw].sort(
+      (a, b) => countValue(b._count) - countValue(a._count),
+    );
+    const sortedCategories = [...topCategoriesRaw].sort(
+      (a, b) => countValue(b._count) - countValue(a._count),
+    );
 
     // Get totals before pagination
     const totalUsers = sortedUsers.length;
@@ -217,19 +254,25 @@ export class AdminService {
             where: { id: { in: userIds } },
             select: { id: true, username: true, email: true },
           })
-        : Promise.resolve([] as { id: string; username: string | null; email: string }[]),
+        : Promise.resolve(
+            [] as { id: string; username: string | null; email: string }[],
+          ),
       siteIds.length
         ? this.prisma.site.findMany({
             where: { id: { in: siteIds } },
             select: { id: true, name: true, baseUrl: true },
           })
-        : Promise.resolve([] as { id: string; name: string; baseUrl: string }[]),
+        : Promise.resolve(
+            [] as { id: string; name: string; baseUrl: string }[],
+          ),
       productIds.length
         ? this.prisma.product.findMany({
             where: { id: { in: productIds } },
             select: { id: true, title: true, sourceUrl: true },
           })
-        : Promise.resolve([] as { id: string; title: string; sourceUrl: string }[]),
+        : Promise.resolve(
+            [] as { id: string; title: string; sourceUrl: string }[],
+          ),
     ]);
 
     const topUsers = paginatedUsersRaw.map((item) => {
@@ -264,7 +307,10 @@ export class AdminService {
 
     const topCategories = paginatedCategoriesRaw
       .filter((item) => item.category)
-      .map((item) => ({ category: item.category as string, count: countValue(item._count) }));
+      .map((item) => ({
+        category: item.category as string,
+        count: countValue(item._count),
+      }));
 
     const getTotal = () => {
       if (type === 'users') return totalUsers;
@@ -290,7 +336,12 @@ export class AdminService {
     };
   }
 
-  async listUsers(params: { page?: number; limit?: number; search?: string; actorRole?: UserRole }) {
+  async listUsers(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    actorRole?: UserRole;
+  }) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -300,27 +351,29 @@ export class AdminService {
       const searchTerm = `%${params.search}%`;
       const paramsList: any[] = [searchTerm];
       let paramIndex = 2;
-      
+
       let roleCondition = '';
       if (params.actorRole === UserRole.MOD) {
         roleCondition = `AND u.role = $${paramIndex}`;
         paramsList.push(UserRole.USER);
         paramIndex++;
       }
-      
+
       paramsList.push(limit, skip);
 
       const [usersRaw, totalRaw] = await Promise.all([
-        this.prisma.$queryRawUnsafe<Array<{
-          id: string;
-          email: string;
-          username: string | null;
-          role: string;
-          balance: number;
-          banned_at: Date | null;
-          created_at: Date;
-          updated_at: Date | null;
-        }>>(
+        this.prisma.$queryRawUnsafe<
+          Array<{
+            id: string;
+            email: string;
+            username: string | null;
+            role: string;
+            balance: number;
+            banned_at: Date | null;
+            created_at: Date;
+            updated_at: Date | null;
+          }>
+        >(
           `SELECT u.*
            FROM users u
            WHERE (unaccent(u.email) ILIKE unaccent($1) OR unaccent(u.username) ILIKE unaccent($1))
@@ -364,7 +417,7 @@ export class AdminService {
     }
 
     // Normal query when no search
-    let where: any = {};
+    const where: any = {};
     if (params.actorRole === UserRole.MOD) {
       where.role = UserRole.USER;
     }
@@ -470,7 +523,9 @@ export class AdminService {
       }
       // Mod không thể thay đổi role thành MOD hoặc ADMIN
       if (params.role && params.role !== UserRole.USER) {
-        throw new ForbiddenException('Mod không thể thay đổi role thành MOD hoặc ADMIN');
+        throw new ForbiddenException(
+          'Mod không thể thay đổi role thành MOD hoặc ADMIN',
+        );
       }
     }
 
@@ -622,7 +677,12 @@ export class AdminService {
     return start;
   }
 
-  async listSites(params: { page?: number; limit?: number; search?: string; userId?: string }) {
+  async listSites(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    userId?: string;
+  }) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -655,19 +715,23 @@ export class AdminService {
     // If search is provided, use raw query with unaccent for better Vietnamese support
     if (params.search) {
       const searchTerm = `%${params.search}%`;
-      const userIdCondition = params.userId ? `AND s.user_id = $${params.userId ? '3' : '2'}` : '';
+      const userIdCondition = params.userId
+        ? `AND s.user_id = $${params.userId ? '3' : '2'}`
+        : '';
       const userIdParam = params.userId ? [params.userId] : [];
 
       const [sitesRaw, totalRaw] = await Promise.all([
-        this.prisma.$queryRawUnsafe<Array<{
-          id: string;
-          name: string;
-          base_url: string;
-          user_id: string;
-          created_at: Date;
-          user_email: string | null;
-          user_username: string | null;
-        }>>(
+        this.prisma.$queryRawUnsafe<
+          Array<{
+            id: string;
+            name: string;
+            base_url: string;
+            user_id: string;
+            created_at: Date;
+            user_email: string | null;
+            user_username: string | null;
+          }>
+        >(
           `SELECT s.*, u.email as user_email, u.username as user_username
            FROM sites s
            LEFT JOIN users u ON s.user_id = u.id
@@ -747,7 +811,11 @@ export class AdminService {
     };
   }
 
-  async listCategories(params: { page?: number; limit?: number; search?: string }) {
+  async listCategories(params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+  }) {
     const page = params.page ?? 1;
     const limit = params.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -759,10 +827,12 @@ export class AdminService {
     // Use raw query with unaccent for Vietnamese search without diacritics
     if (params.search) {
       const searchTerm = `%${params.search}%`;
-      const categoriesRaw = await this.prisma.$queryRawUnsafe<Array<{
-        category: string;
-        count: bigint;
-      }>>(
+      const categoriesRaw = await this.prisma.$queryRawUnsafe<
+        Array<{
+          category: string;
+          count: bigint;
+        }>
+      >(
         `SELECT category, COUNT(*)::int as count
          FROM products
          WHERE category IS NOT NULL AND unaccent(category) ILIKE unaccent($1)
@@ -774,7 +844,9 @@ export class AdminService {
         skip,
       );
 
-      const totalRaw = await this.prisma.$queryRawUnsafe<Array<{ count: bigint }>>(
+      const totalRaw = await this.prisma.$queryRawUnsafe<
+        Array<{ count: bigint }>
+      >(
         `SELECT COUNT(DISTINCT category)::int as count
          FROM products
          WHERE category IS NOT NULL AND unaccent(category) ILIKE unaccent($1)`,
@@ -847,7 +919,7 @@ export class AdminService {
       const searchTerm = `%${params.search}%`;
       const paramsList: any[] = [searchTerm];
       let paramIndex = 2;
-      
+
       let additionalConditions = '';
       if (params.status) {
         additionalConditions += `AND p.status = $${paramIndex}`;
@@ -864,23 +936,25 @@ export class AdminService {
         paramsList.push(params.userId);
         paramIndex++;
       }
-      
+
       paramsList.push(limit, skip);
 
       const [productsRaw, totalRaw] = await Promise.all([
-        this.prisma.$queryRawUnsafe<Array<{
-          id: string;
-          title: string | null;
-          source_url: string;
-          status: string;
-          category: string | null;
-          price: number | null;
-          original_price: number | null;
-          created_at: Date;
-          user_id: string;
-          user_email: string | null;
-          user_username: string | null;
-        }>>(
+        this.prisma.$queryRawUnsafe<
+          Array<{
+            id: string;
+            title: string | null;
+            source_url: string;
+            status: string;
+            category: string | null;
+            price: number | null;
+            original_price: number | null;
+            created_at: Date;
+            user_id: string;
+            user_email: string | null;
+            user_username: string | null;
+          }>
+        >(
           `SELECT p.*, u.email as user_email, u.username as user_username
            FROM products p
            LEFT JOIN users u ON p.user_id = u.id
@@ -942,9 +1016,16 @@ export class AdminService {
     if (params.search) {
       where.OR = [
         { title: { contains: params.search, mode: 'insensitive' as const } },
-        { description: { contains: params.search, mode: 'insensitive' as const } },
+        {
+          description: {
+            contains: params.search,
+            mode: 'insensitive' as const,
+          },
+        },
         { category: { contains: params.search, mode: 'insensitive' as const } },
-        { sourceUrl: { contains: params.search, mode: 'insensitive' as const } },
+        {
+          sourceUrl: { contains: params.search, mode: 'insensitive' as const },
+        },
       ];
     }
 
@@ -989,5 +1070,3 @@ export class AdminService {
     };
   }
 }
-
-

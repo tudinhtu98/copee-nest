@@ -10,7 +10,10 @@ const base = {
   status: 'PROPOSED',
   summary: 'Tạo video cho "Bình giữ nhiệt"',
   params: {},
-  preview: { items: [{ label: 'Chi phí', after: '5.000 điểm' }], warnings: ['Trừ 5.000 điểm khi xác nhận'] },
+  preview: {
+    items: [{ label: 'Chi phí', after: '5.000 điểm' }],
+    warnings: ['Trừ 5.000 điểm khi xác nhận'],
+  },
   result: null,
   error: null,
   costPoints: 5000,
@@ -23,14 +26,20 @@ const base = {
 
 describe('toActionDto', () => {
   it('đề xuất còn hạn thì hiện đúng nội dung xem trước và chi phí', () => {
-    const dto = toActionDto({ ...base, expiresAt: new Date('2026-09-20T10:15:00Z') }, new Date('2026-09-20T10:05:00Z'));
+    const dto = toActionDto(
+      { ...base, expiresAt: new Date('2026-09-20T10:15:00Z') },
+      new Date('2026-09-20T10:05:00Z'),
+    );
     expect(dto).toMatchObject({ status: 'PROPOSED', costPoints: 5000 });
     expect(dto.items[0]).toEqual({ label: 'Chi phí', after: '5.000 điểm' });
     expect(dto.warnings).toHaveLength(1);
   });
 
   it('quá hạn mà chưa ai bấm thì hiển thị là đã hết hạn', () => {
-    const dto = toActionDto({ ...base, expiresAt: new Date('2026-09-20T10:15:00Z') }, new Date('2026-09-20T10:20:00Z'));
+    const dto = toActionDto(
+      { ...base, expiresAt: new Date('2026-09-20T10:15:00Z') },
+      new Date('2026-09-20T10:20:00Z'),
+    );
     expect(dto.status).toBe('EXPIRED');
   });
 

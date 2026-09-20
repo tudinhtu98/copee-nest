@@ -123,30 +123,30 @@ export class BillingService {
   async getTransactions(
     userId: string,
     options?: {
-      page?: number
-      limit?: number
-      type?: string
-      startDate?: Date
-      endDate?: Date
+      page?: number;
+      limit?: number;
+      type?: string;
+      startDate?: Date;
+      endDate?: Date;
     },
   ) {
-    const page = options?.page || 1
-    const limit = options?.limit || 20
-    const skip = (page - 1) * limit
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const skip = (page - 1) * limit;
 
-    const where: any = { userId }
+    const where: any = { userId };
 
     if (options?.type) {
-      where.type = options.type.toUpperCase()
+      where.type = options.type.toUpperCase();
     }
 
     if (options?.startDate || options?.endDate) {
-      where.createdAt = {}
+      where.createdAt = {};
       if (options.startDate) {
-        where.createdAt.gte = options.startDate
+        where.createdAt.gte = options.startDate;
       }
       if (options.endDate) {
-        where.createdAt.lte = options.endDate
+        where.createdAt.lte = options.endDate;
       }
     }
 
@@ -158,7 +158,7 @@ export class BillingService {
         take: limit,
       }),
       this.prisma.transaction.count({ where }),
-    ])
+    ]);
 
     return {
       items,
@@ -168,6 +168,6 @@ export class BillingService {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    }
+    };
   }
 }

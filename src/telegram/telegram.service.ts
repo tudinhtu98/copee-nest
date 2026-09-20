@@ -244,7 +244,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const text = ctx.message.text.trim();
       if (text.startsWith('/')) return; // các lệnh khác bỏ qua
 
-      const state = this.pending.get(ctx.from!.id);
+      const state = this.pending.get(ctx.from.id);
       if (state?.kind === 'awaitAmount') {
         return this.handleManualAmount(ctx, state, text);
       }
@@ -258,12 +258,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       await ctx.answerCbQuery();
       const idx = Number(ctx.match[1]);
       const tier = this.tiers[idx];
-      const state = this.pending.get(ctx.from!.id);
+      const state = this.pending.get(ctx.from.id);
       if (!tier || !state)
         return ctx.editMessageText('Phiên đã hết hạn. Gửi lại username nhé.');
       const target =
         state.kind === 'awaitAmount' || state.kind === 'confirm'
-          ? { userId: state.userId, username: state.username, balance: state.balance }
+          ? {
+              userId: state.userId,
+              username: state.username,
+              balance: state.balance,
+            }
           : null;
       if (!target) return;
       return this.askConfirm(
@@ -280,10 +284,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     bot.action('manual', async (ctx) => {
       if (!this.isAllowed(ctx.from?.id)) return this.denyAndReport(ctx);
       await ctx.answerCbQuery();
-      const state = this.pending.get(ctx.from!.id);
+      const state = this.pending.get(ctx.from.id);
       if (!state)
         return ctx.editMessageText('Phiên đã hết hạn. Gửi lại username nhé.');
-      this.pending.set(ctx.from!.id, {
+      this.pending.set(ctx.from.id, {
         kind: 'awaitAmount',
         userId: state.userId,
         username: state.username,
@@ -302,7 +306,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     bot.action('cancel', async (ctx) => {
       await ctx.answerCbQuery('Đã hủy');
-      this.pending.delete(ctx.from!.id);
+      this.pending.delete(ctx.from.id);
       return ctx.editMessageText('❌ Đã hủy giao dịch.');
     });
 
@@ -393,7 +397,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const nameOf = new Map(users.map((u) => [u.id, u.username]));
 
     const label =
-      period === 'day' ? 'Hôm nay' : period === 'month' ? 'Tháng này' : 'Năm nay';
+      period === 'day'
+        ? 'Hôm nay'
+        : period === 'month'
+          ? 'Tháng này'
+          : 'Năm nay';
     const credited = credit._sum.amount ?? 0;
     const spent = Math.abs(debit._sum.amount ?? 0);
 
@@ -440,7 +448,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       select: { id: true, username: true, balance: true, bannedAt: true },
     });
     if (!user) {
-      return ctx.reply(`Không tìm thấy user "${username}". Kiểm tra lại username.`);
+      return ctx.reply(
+        `Không tìm thấy user "${username}". Kiểm tra lại username.`,
+      );
     }
 
     this.pending.set(ctx.from!.id, {
@@ -459,7 +469,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     });
     // 2 nút mỗi hàng
     const rows: any[] = [];
-    for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
+    for (let i = 0; i < buttons.length; i += 2)
+      rows.push(buttons.slice(i, i + 2));
     rows.push([Markup.button.callback('✏️ Nhập tay', 'manual')]);
 
     const banned = user.bannedAt ? '\n⚠️ User đang bị khóa!' : '';

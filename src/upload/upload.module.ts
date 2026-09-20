@@ -26,4 +26,3 @@ import { BillingModule } from '../billing/billing.module';
   exports: [UploadService],
 })
 export class UploadModule {}
-

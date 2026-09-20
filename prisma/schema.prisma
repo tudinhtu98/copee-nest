@@ -83,13 +83,24 @@ model Product {
   @@map("products")
 }
 
+/// Một video do AI dựng. Hai loại (cột kind):
+///  - PRODUCT: video quảng cáo sản phẩm đã copy về (bắt buộc có productId).
+///  - STORY:   video "một người nói chuyện" kể chuyện đời sống; không gắn sản phẩm,
+///             lời thoại + mô tả cảnh nằm trong cột scenes (do người dùng duyệt trước khi dựng).
 model VideoJob {
   id           String   @id @default(cuid())
   userId       String   @map("user_id")
-  productId    String   @map("product_id")
+  productId    String?  @map("product_id")
+  kind         String   @default("PRODUCT") // PRODUCT | STORY
   status       String   @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
   style        String   @default("default") // template/kiểu video
+  title        String? // tiêu đề video STORY (video sản phẩm lấy tên từ product)
   caption      String? // caption + hashtag để đăng social
+  scenes       Json? // STORY: [{ spoken, visual }] đã được người dùng xác nhận
+  spokenText   String?  @map("spoken_text") // STORY: toàn bộ lời thoại, để người dùng tự chèn phụ đề
+  mediaId      String?  @map("media_id") // STORY: ảnh chân dung trong thư viện (MediaAsset)
+  presenter    String? // STORY: mô tả người dẫn khi không có ảnh chân dung
+  clips        Int      @default(1) // STORY: số clip ghép lại (1 hoặc 3)
   videoUrl     String?  @map("video_url") // link mp4 kết quả
   durationSec  Int?     @map("duration_sec")
   cost         Int      @default(0) // số điểm đã trừ
@@ -98,7 +109,7 @@ model VideoJob {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   user         User     @relation(fields: [userId], references: [id])
-  product      Product  @relation(fields: [productId], references: [id])
+  product      Product? @relation(fields: [productId], references: [id])
 
   @@index([userId])
   @@index([status])

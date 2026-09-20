@@ -21,54 +21,56 @@ export class ProductsService {
   async list(
     userId: string,
     options?: {
-      page?: number
-      limit?: number
-      search?: string
-      status?: string
-      sortBy?: string
-      sortOrder?: 'asc' | 'desc'
+      page?: number;
+      limit?: number;
+      search?: string;
+      status?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
     },
   ) {
-    const page = options?.page || 1
-    const limit = options?.limit || 20
-    const skip = (page - 1) * limit
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const skip = (page - 1) * limit;
 
     // Use raw query with unaccent for Vietnamese search without diacritics
     if (options?.search) {
-      const searchTerm = `%${options.search}%`
-      const paramsList: any[] = [searchTerm, userId]
-      let paramIndex = 3
-      
-      let additionalConditions = 'AND p.user_id = $2'
+      const searchTerm = `%${options.search}%`;
+      const paramsList: any[] = [searchTerm, userId];
+      let paramIndex = 3;
+
+      let additionalConditions = 'AND p.user_id = $2';
       if (options.status) {
-        additionalConditions += ` AND p.status = $${paramIndex}`
-        paramsList.push(options.status)
-        paramIndex++
+        additionalConditions += ` AND p.status = $${paramIndex}`;
+        paramsList.push(options.status);
+        paramIndex++;
       }
-      
-      const sortBy = options.sortBy || 'created_at'
-      const sortOrder = options.sortOrder || 'desc'
-      const sortColumn = sortBy === 'createdAt' ? 'created_at' : sortBy
-      
-      paramsList.push(limit, skip)
+
+      const sortBy = options.sortBy || 'created_at';
+      const sortOrder = options.sortOrder || 'desc';
+      const sortColumn = sortBy === 'createdAt' ? 'created_at' : sortBy;
+
+      paramsList.push(limit, skip);
 
       const [itemsRaw, totalRaw] = await Promise.all([
-        this.prisma.$queryRawUnsafe<Array<{
-          id: string
-          title: string | null
-          source_url: string
-          status: string
-          category: string | null
-          price: number | null
-          original_price: number | null
-          description: string | null
-          images: string[] | null
-          currency: string | null
-          affiliate_url: string | null
-          affiliate_sub_id: string | null
-          created_at: Date
-          updated_at: Date | null
-        }>>(
+        this.prisma.$queryRawUnsafe<
+          Array<{
+            id: string;
+            title: string | null;
+            source_url: string;
+            status: string;
+            category: string | null;
+            price: number | null;
+            original_price: number | null;
+            description: string | null;
+            images: string[] | null;
+            currency: string | null;
+            affiliate_url: string | null;
+            affiliate_sub_id: string | null;
+            created_at: Date;
+            updated_at: Date | null;
+          }>
+        >(
           `SELECT p.*
            FROM products p
            WHERE (unaccent(p.title) ILIKE unaccent($1) 
@@ -92,7 +94,7 @@ export class ProductsService {
           userId,
           ...(options.status ? [options.status] : []),
         ),
-      ])
+      ]);
 
       const items = itemsRaw.map((item) => ({
         id: item.id,
@@ -109,9 +111,9 @@ export class ProductsService {
         affiliateSubId: item.affiliate_sub_id,
         createdAt: item.created_at,
         updatedAt: item.updated_at,
-      }))
+      }));
 
-      const total = Number(totalRaw[0]?.count || 0)
+      const total = Number(totalRaw[0]?.count || 0);
 
       return {
         items,
@@ -121,18 +123,18 @@ export class ProductsService {
           total,
           totalPages: Math.ceil(total / limit),
         },
-      }
+      };
     }
 
     // Normal query when no search
-    const where: any = { userId }
+    const where: any = { userId };
 
     if (options?.status) {
-      where.status = options.status
+      where.status = options.status;
     }
 
-    const orderBy: any = {}
-    orderBy[options?.sortBy || 'createdAt'] = options?.sortOrder || 'desc'
+    const orderBy: any = {};
+    orderBy[options?.sortBy || 'createdAt'] = options?.sortOrder || 'desc';
 
     const [items, total] = await Promise.all([
       this.prisma.product.findMany({
@@ -142,7 +144,7 @@ export class ProductsService {
         take: limit,
       }),
       this.prisma.product.count({ where }),
-    ])
+    ]);
 
     return {
       items,
@@ -152,7 +154,7 @@ export class ProductsService {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    }
+    };
   }
 
   async createUploadJob(
@@ -191,39 +193,39 @@ export class ProductsService {
   async listUploadJobs(
     userId: string,
     options?: {
-      page?: number
-      limit?: number
-      status?: string
-      siteId?: string
-      sortBy?: string
-      sortOrder?: 'asc' | 'desc'
+      page?: number;
+      limit?: number;
+      status?: string;
+      siteId?: string;
+      sortBy?: string;
+      sortOrder?: 'asc' | 'desc';
     },
   ) {
-    const page = options?.page || 1
-    const limit = options?.limit || 20
-    const skip = (page - 1) * limit
+    const page = options?.page || 1;
+    const limit = options?.limit || 20;
+    const skip = (page - 1) * limit;
 
     const where: any = {
       product: { userId },
       site: { userId },
-    }
+    };
 
     if (options?.status) {
-      where.status = options.status
+      where.status = options.status;
     }
 
     if (options?.siteId) {
-      where.siteId = options.siteId
+      where.siteId = options.siteId;
     }
 
-    const orderBy: any = {}
-    orderBy[options?.sortBy || 'createdAt'] = options?.sortOrder || 'desc'
+    const orderBy: any = {};
+    orderBy[options?.sortBy || 'createdAt'] = options?.sortOrder || 'desc';
 
     const [items, total] = await Promise.all([
       this.prisma.uploadJob.findMany({
         where,
-        include: { 
-          product: true, 
+        include: {
+          product: true,
           site: true,
         },
         orderBy,
@@ -231,12 +233,12 @@ export class ProductsService {
         take: limit,
       }),
       this.prisma.uploadJob.count({ where }),
-    ])
-    
+    ]);
+
     // Fetch WooCommerce categories to map targetCategory IDs to names
     const siteIds = [...new Set(items.map((job: any) => job.siteId))];
     const categoriesMap = new Map<string, Map<string, string>>(); // siteId -> (categoryId -> categoryName)
-    
+
     for (const siteId of siteIds) {
       const siteCategories = await this.prisma.wooCommerceCategory.findMany({
         where: { siteId },
@@ -248,13 +250,14 @@ export class ProductsService {
       });
       categoriesMap.set(siteId, categoryMap);
     }
-    
+
     // Map category names to jobs
     const itemsWithCategoryNames = items.map((job: any) => {
       const categoryMap = categoriesMap.get(job.siteId);
-      const categoryName = job.targetCategory && categoryMap 
-        ? categoryMap.get(String(job.targetCategory)) || job.targetCategory
-        : job.targetCategory;
+      const categoryName =
+        job.targetCategory && categoryMap
+          ? categoryMap.get(String(job.targetCategory)) || job.targetCategory
+          : job.targetCategory;
       return {
         ...job,
         targetCategoryName: categoryName,
@@ -269,7 +272,7 @@ export class ProductsService {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    }
+    };
   }
 
   async processPendingUploads(userId: string, jobIds?: string[]) {
@@ -277,11 +280,11 @@ export class ProductsService {
       status: { in: ['PENDING', 'FAILED'] },
       product: { userId },
       site: { userId },
-    }
-    
+    };
+
     // Exclude CANCELLED jobs (already filtered by status: PENDING/FAILED above)
     if (jobIds && jobIds.length > 0) {
-      where.id = { in: jobIds }
+      where.id = { in: jobIds };
     }
     // No retryCount filter: this endpoint is user-initiated ("Xử lý tất cả"),
     // so FAILED jobs (which always have retryCount >= maxRetries) must be
@@ -293,20 +296,24 @@ export class ProductsService {
       include: { product: true, site: true },
       take: jobIds && jobIds.length > 0 ? jobIds.length : 100, // Increased limit for queue processing
     });
-    
+
     if (jobs.length === 0) return { processed: 0, queued: 0 };
 
     // Reset retryCount for FAILED jobs that are being manually retried
-    const failedJobsToReset = jobs.filter(job => job.status === 'FAILED' && job.retryCount >= 3);
+    const failedJobsToReset = jobs.filter(
+      (job) => job.status === 'FAILED' && job.retryCount >= 3,
+    );
     if (failedJobsToReset.length > 0) {
       await this.prisma.uploadJob.updateMany({
-        where: { id: { in: failedJobsToReset.map(j => j.id) } },
-        data: { 
+        where: { id: { in: failedJobsToReset.map((j) => j.id) } },
+        data: {
           retryCount: 0, // Reset retry count for manual retry
           status: 'PENDING', // Reset to PENDING
         },
       });
-      console.log(`[Queue] Reset ${failedJobsToReset.length} FAILED jobs for manual retry`);
+      console.log(
+        `[Queue] Reset ${failedJobsToReset.length} FAILED jobs for manual retry`,
+      );
     }
 
     // Add jobs to queue for parallel processing
@@ -321,7 +328,9 @@ export class ProductsService {
     // Add all jobs to queue (status will be updated to PROCESSING by the processor)
     await this.uploadService.addBulkUploadJobs(queueJobs);
 
-    console.log(`[Queue] Added ${jobs.length} upload jobs to queue for parallel processing`);
+    console.log(
+      `[Queue] Added ${jobs.length} upload jobs to queue for parallel processing`,
+    );
 
     return { processed: jobs.length, queued: jobs.length };
   }
@@ -355,15 +364,17 @@ export class ProductsService {
     userId: string,
     productId: string,
     data: {
-      title?: string | null
-      description?: string | null
-      price?: number | null
-      category?: string | null
-      sourceUrl?: string | null
-      images?: string[]
+      title?: string | null;
+      description?: string | null;
+      price?: number | null;
+      category?: string | null;
+      sourceUrl?: string | null;
+      images?: string[];
     },
   ) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+    });
     if (!product || product.userId !== userId) {
       throw new ForbiddenException('Không tìm thấy sản phẩm');
     }
@@ -407,9 +418,10 @@ export class ProductsService {
 
     if (Array.isArray(data.images)) {
       const normalizedImages = data.images.filter(
-        (url) => typeof url === 'string' && url.trim().length > 0
+        (url) => typeof url === 'string' && url.trim().length > 0,
       );
-      updateData.images = normalizedImages.length > 0 ? normalizedImages : Prisma.JsonNull;
+      updateData.images =
+        normalizedImages.length > 0 ? normalizedImages : Prisma.JsonNull;
       hasChanges = true;
     }
 
@@ -417,7 +429,10 @@ export class ProductsService {
       return product;
     }
 
-    return this.prisma.product.update({ where: { id: productId }, data: updateData });
+    return this.prisma.product.update({
+      where: { id: productId },
+      data: updateData,
+    });
   }
 
   /**
@@ -428,7 +443,9 @@ export class ProductsService {
     productId: string,
     options?: { subId?: string },
   ) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+    });
     if (!product || product.userId !== userId) {
       throw new ForbiddenException('Không tìm thấy sản phẩm');
     }
@@ -448,7 +465,9 @@ export class ProductsService {
   }
 
   async deleteProduct(userId: string, productId: string) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+    });
     if (!product || product.userId !== userId) {
       throw new ForbiddenException('Không tìm thấy sản phẩm');
     }
@@ -476,7 +495,9 @@ export class ProductsService {
     });
 
     if (products.length !== productIds.length) {
-      throw new ForbiddenException('Một số sản phẩm không tồn tại hoặc không thuộc quyền sở hữu của bạn');
+      throw new ForbiddenException(
+        'Một số sản phẩm không tồn tại hoặc không thuộc quyền sở hữu của bạn',
+      );
     }
 
     // Delete related upload jobs first
@@ -489,20 +510,23 @@ export class ProductsService {
       where: { id: { in: productIds } },
     });
 
-    return { message: `Đã xóa ${productIds.length} sản phẩm`, deleted: productIds.length };
+    return {
+      message: `Đã xóa ${productIds.length} sản phẩm`,
+      deleted: productIds.length,
+    };
   }
 
   async copyProduct(
     userId: string,
     input: {
-      sourceUrl: string
-      title?: string
-      description?: string | null
-      images?: string[] | null
-      price?: number | null // Sale price (giá đã giảm)
-      originalPrice?: number | null // Regular price (giá gốc)
-      currency?: string | null
-      category?: string | null
+      sourceUrl: string;
+      title?: string;
+      description?: string | null;
+      images?: string[] | null;
+      price?: number | null; // Sale price (giá đã giảm)
+      originalPrice?: number | null; // Regular price (giá gốc)
+      currency?: string | null;
+      category?: string | null;
     },
   ) {
     const sourceUrl = input.sourceUrl?.trim();
@@ -511,25 +535,52 @@ export class ProductsService {
     }
 
     const normalizedImages = Array.isArray(input.images)
-      ? input.images.filter((url) => typeof url === 'string' && url.trim().length > 0)
+      ? input.images.filter(
+          (url) => typeof url === 'string' && url.trim().length > 0,
+        )
       : [];
 
-    const title = typeof input.title === 'string' ? input.title.trim() : undefined;
-    const description = typeof input.description === 'string' ? input.description.trim() : undefined;
-    const currency = typeof input.currency === 'string' ? input.currency.trim() : undefined;
-    const category = typeof input.category === 'string' ? input.category.trim() : undefined;
-    const price = typeof input.price === 'number' ? Math.round(input.price) : undefined; // Sale price (giá đã giảm)
-    const originalPrice = typeof input.originalPrice === 'number' ? Math.round(input.originalPrice) : undefined; // Regular price (giá gốc)
+    const title =
+      typeof input.title === 'string' ? input.title.trim() : undefined;
+    const description =
+      typeof input.description === 'string'
+        ? input.description.trim()
+        : undefined;
+    const currency =
+      typeof input.currency === 'string' ? input.currency.trim() : undefined;
+    const category =
+      typeof input.category === 'string' ? input.category.trim() : undefined;
+    const price =
+      typeof input.price === 'number' ? Math.round(input.price) : undefined; // Sale price (giá đã giảm)
+    const originalPrice =
+      typeof input.originalPrice === 'number'
+        ? Math.round(input.originalPrice)
+        : undefined; // Regular price (giá gốc)
 
-    const descriptionProvided = Object.prototype.hasOwnProperty.call(input, 'description');
+    const descriptionProvided = Object.prototype.hasOwnProperty.call(
+      input,
+      'description',
+    );
     const priceProvided = Object.prototype.hasOwnProperty.call(input, 'price');
-    const originalPriceProvided = Object.prototype.hasOwnProperty.call(input, 'originalPrice');
-    const currencyProvided = Object.prototype.hasOwnProperty.call(input, 'currency');
-    const categoryProvided = Object.prototype.hasOwnProperty.call(input, 'category');
-    const imagesProvided = Object.prototype.hasOwnProperty.call(input, 'images');
+    const originalPriceProvided = Object.prototype.hasOwnProperty.call(
+      input,
+      'originalPrice',
+    );
+    const currencyProvided = Object.prototype.hasOwnProperty.call(
+      input,
+      'currency',
+    );
+    const categoryProvided = Object.prototype.hasOwnProperty.call(
+      input,
+      'category',
+    );
+    const imagesProvided = Object.prototype.hasOwnProperty.call(
+      input,
+      'images',
+    );
 
     // Category mapping is no longer used - user selects category directly in upload dialog
-    let categoryId: string | undefined = undefined;
+    const categoryId: string | undefined = undefined;
     let needsMapping = false;
     if (category && category.length > 0) {
       // Category will be selected manually during upload
@@ -556,16 +607,18 @@ export class ProductsService {
         (updateData as any).originalPrice = originalPrice ?? null;
       }
       if (currencyProvided) {
-        updateData.currency = currency && currency.length > 0 ? currency : 'VND';
+        updateData.currency =
+          currency && currency.length > 0 ? currency : 'VND';
       }
       if (categoryProvided) {
-        updateData.category =
-          category && category.length > 0 ? category : null;
+        updateData.category = category && category.length > 0 ? category : null;
         (updateData as any).categoryId = categoryId || null;
         (updateData as any).needsMapping = needsMapping;
       }
       if (imagesProvided) {
-        updateData.images = normalizedImages.length ? normalizedImages : Prisma.JsonNull;
+        updateData.images = normalizedImages.length
+          ? normalizedImages
+          : Prisma.JsonNull;
       }
 
       return this.prisma.product.update({
@@ -581,10 +634,12 @@ export class ProductsService {
       title: title && title.length > 0 ? title : 'Sản phẩm Shopee',
       status: 'DRAFT',
       currency: currency && currency.length > 0 ? currency : 'VND',
-      description: descriptionProvided ? description ?? null : undefined,
-      price: priceProvided ? price ?? null : undefined,
-      originalPrice: originalPriceProvided ? originalPrice ?? null : undefined,
-      category: categoryProvided ? category ?? null : undefined,
+      description: descriptionProvided ? (description ?? null) : undefined,
+      price: priceProvided ? (price ?? null) : undefined,
+      originalPrice: originalPriceProvided
+        ? (originalPrice ?? null)
+        : undefined,
+      category: categoryProvided ? (category ?? null) : undefined,
       categoryId: categoryId || undefined,
       needsMapping: needsMapping,
       images: normalizedImages.length ? normalizedImages : undefined,
@@ -593,18 +648,25 @@ export class ProductsService {
     return this.prisma.product.create({ data: createData });
   }
 
-  private async uploadImageToMediaLibrary(site: any, imageUrl: string): Promise<string> {
+  private async uploadImageToMediaLibrary(
+    site: any,
+    imageUrl: string,
+  ): Promise<string> {
     const mediaEndpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wp/v2/media`;
-    
+
     // WordPress REST API may not accept WooCommerce credentials
     // Try WooCommerce credentials first, but log if it fails
     const auth = Buffer.from(
       `${site.wooConsumerKey}:${site.wooConsumerSecret}`,
     ).toString('base64');
-    
-    console.log(`[Image Upload] Using WordPress REST API with WooCommerce credentials`);
+
+    console.log(
+      `[Image Upload] Using WordPress REST API with WooCommerce credentials`,
+    );
     console.log(`[Image Upload] Endpoint: ${mediaEndpoint}`);
-    console.log(`[Image Upload] Note: If this fails with 401/403, WordPress may require Application Password instead of WooCommerce keys`);
+    console.log(
+      `[Image Upload] Note: If this fails with 401/403, WordPress may require Application Password instead of WooCommerce keys`,
+    );
 
     // Download image with timeout and retry
     let imageRes: Response | undefined;
@@ -618,28 +680,37 @@ export class ProductsService {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
 
-        console.log(`[Image Upload] Downloading image (attempt ${attempt}/${maxRetries}): ${imageUrl}`);
+        console.log(
+          `[Image Upload] Downloading image (attempt ${attempt}/${maxRetries}): ${imageUrl}`,
+        );
 
         imageRes = await fetch(imageUrl, {
           signal: controller.signal,
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-            'Referer': 'https://shopee.vn/',
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            Accept: 'image/webp,image/apng,image/*,*/*;q=0.8',
+            Referer: 'https://shopee.vn/',
           },
         });
 
         clearTimeout(timeoutId);
 
         if (!imageRes.ok) {
-          throw new Error(`Failed to download image: ${imageRes.status} ${imageRes.statusText}`);
+          throw new Error(
+            `Failed to download image: ${imageRes.status} ${imageRes.statusText}`,
+          );
         }
 
         // Read response with timeout
         const arrayBuffer = await Promise.race([
           imageRes.arrayBuffer(),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Download timeout: response body too slow')), 30000),
+            setTimeout(
+              () =>
+                reject(new Error('Download timeout: response body too slow')),
+              30000,
+            ),
           ),
         ]);
 
@@ -648,7 +719,10 @@ export class ProductsService {
         break; // Success, exit retry loop
       } catch (error: any) {
         lastError = error;
-        console.warn(`[Image Upload] Attempt ${attempt}/${maxRetries} failed:`, error.message);
+        console.warn(
+          `[Image Upload] Attempt ${attempt}/${maxRetries} failed:`,
+          error.message,
+        );
 
         if (attempt < maxRetries) {
           // Wait before retry (exponential backoff)
@@ -660,7 +734,9 @@ export class ProductsService {
     }
 
     if (lastError || !imageRes || !imageBuffer) {
-      throw new Error(`Failed to download image after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`);
+      throw new Error(
+        `Failed to download image after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`,
+      );
     }
 
     const imageType = imageRes.headers.get('content-type') || 'image/jpeg';
@@ -672,10 +748,16 @@ export class ProductsService {
     const blob = new Blob([new Uint8Array(imageBuffer)], { type: imageType });
     formData.append('file', blob, fileName);
 
-    console.log(`[Image Upload] Uploading to WordPress media library: ${mediaEndpoint}`);
-    console.log(`[Image Upload] Image size: ${(imageBuffer.length / 1024).toFixed(2)} KB`);
-    console.log(`[Image Upload] Image type: ${imageType}, File name: ${fileName}`);
-    
+    console.log(
+      `[Image Upload] Uploading to WordPress media library: ${mediaEndpoint}`,
+    );
+    console.log(
+      `[Image Upload] Image size: ${(imageBuffer.length / 1024).toFixed(2)} KB`,
+    );
+    console.log(
+      `[Image Upload] Image type: ${imageType}, File name: ${fileName}`,
+    );
+
     const uploadRes = await fetch(mediaEndpoint, {
       method: 'POST',
       headers: {
@@ -686,9 +768,11 @@ export class ProductsService {
     });
 
     if (!uploadRes.ok) {
-      const errorText = await uploadRes.text().catch(() => 'Unable to read error response');
+      const errorText = await uploadRes
+        .text()
+        .catch(() => 'Unable to read error response');
       let errorMessage = `Failed to upload to media library: ${uploadRes.status} ${uploadRes.statusText}`;
-      
+
       try {
         const errorData = JSON.parse(errorText);
         if (errorData.message) {
@@ -703,7 +787,7 @@ export class ProductsService {
         // If not JSON, include first 500 chars of response
         errorMessage = `${errorMessage}. Response: ${errorText.substring(0, 500)}`;
       }
-      
+
       console.error(`[Image Upload] WordPress upload failed:`, {
         status: uploadRes.status,
         statusText: uploadRes.statusText,
@@ -713,7 +797,7 @@ export class ProductsService {
         errorMessage,
         fullErrorResponse: errorText.substring(0, 1000), // Log first 1000 chars for debugging
       });
-      
+
       // Provide helpful error message based on status code
       if (uploadRes.status === 401 || uploadRes.status === 403) {
         errorMessage = `${errorMessage}\n\nNOTE: WordPress REST API may require Application Password instead of WooCommerce API keys. Please check WordPress settings.`;
@@ -722,18 +806,25 @@ export class ProductsService {
       } else if (uploadRes.status === 415) {
         errorMessage = `${errorMessage}\n\nNOTE: Unsupported media type. WordPress may not accept this image format.`;
       }
-      
+
       throw new Error(errorMessage);
     }
 
     const mediaData = await uploadRes.json();
-    
+
     if (!mediaData || !mediaData.source_url) {
-      console.error(`[Image Upload] WordPress response missing source_url:`, mediaData);
-      throw new Error(`WordPress API returned success but no source_url. Response: ${JSON.stringify(mediaData).substring(0, 200)}`);
+      console.error(
+        `[Image Upload] WordPress response missing source_url:`,
+        mediaData,
+      );
+      throw new Error(
+        `WordPress API returned success but no source_url. Response: ${JSON.stringify(mediaData).substring(0, 200)}`,
+      );
     }
-    
-    console.log(`[Image Upload] Successfully uploaded to WordPress: ${mediaData.source_url}`);
+
+    console.log(
+      `[Image Upload] Successfully uploaded to WordPress: ${mediaData.source_url}`,
+    );
     return mediaData.source_url;
   }
 
@@ -748,34 +839,49 @@ export class ProductsService {
     const endpoint = `${site.baseUrl.replace(/\/$/, '')}/wp-json/wc/v3/products`;
 
     // Upload images to media library
-    let uploadedImages: { src: string; name?: string }[] = [];
+    const uploadedImages: { src: string; name?: string }[] = [];
     if (Array.isArray(product.images) && product.images.length > 0) {
-      console.log(`[Upload] Starting to upload ${product.images.length} images to WordPress media library`);
+      console.log(
+        `[Upload] Starting to upload ${product.images.length} images to WordPress media library`,
+      );
       for (let i = 0; i < product.images.length; i++) {
         const imgUrl = product.images[i];
         try {
-          console.log(`[Upload] Uploading image ${i + 1}/${product.images.length}: ${imgUrl}`);
+          console.log(
+            `[Upload] Uploading image ${i + 1}/${product.images.length}: ${imgUrl}`,
+          );
           const mediaUrl = await this.uploadImageToMediaLibrary(site, imgUrl);
           uploadedImages.push({ src: mediaUrl });
-          console.log(`[Upload] Successfully uploaded image ${i + 1}/${product.images.length}: ${mediaUrl}`);
+          console.log(
+            `[Upload] Successfully uploaded image ${i + 1}/${product.images.length}: ${mediaUrl}`,
+          );
         } catch (e: any) {
-          console.error(`[Upload] Failed to upload image ${i + 1}/${product.images.length} to WordPress:`, e.message);
-          
+          console.error(
+            `[Upload] Failed to upload image ${i + 1}/${product.images.length} to WordPress:`,
+            e.message,
+          );
+
           // Don't use Shopee URLs directly - WooCommerce will try to download them and timeout
           // Skip this image - product will be created without it
           // User can manually add images later or retry the job after fixing WordPress authentication
-          console.warn(`[Upload] Skipping image ${imgUrl} - WordPress upload failed. Product will be created without this image.`);
+          console.warn(
+            `[Upload] Skipping image ${imgUrl} - WordPress upload failed. Product will be created without this image.`,
+          );
         }
       }
-      console.log(`[Upload] Images summary: ${uploadedImages.length}/${product.images.length} successfully uploaded to WordPress`);
+      console.log(
+        `[Upload] Images summary: ${uploadedImages.length}/${product.images.length} successfully uploaded to WordPress`,
+      );
       if (uploadedImages.length < product.images.length) {
-        console.warn(`[Upload] ${product.images.length - uploadedImages.length} images failed to upload. Product will be created with ${uploadedImages.length} images.`);
+        console.warn(
+          `[Upload] ${product.images.length - uploadedImages.length} images failed to upload. Product will be created with ${uploadedImages.length} images.`,
+        );
       }
     }
 
     // Map category with priority: categoryId > targetCategory > mapping > categoryName
     let categoryArray: { id?: string; name?: string }[] | undefined = undefined;
-    
+
     if (product.categoryId) {
       // Priority 1: Use categoryId from product (already mapped)
       categoryArray = [{ id: product.categoryId }];
@@ -790,12 +896,20 @@ export class ProductsService {
     }
 
     // Log warning if no images available
-    if (uploadedImages.length === 0 && Array.isArray(product.images) && product.images.length > 0) {
-      console.warn(`[Upload] WARNING: No images available. All ${product.images.length} images failed to upload. Product will be created without images.`);
+    if (
+      uploadedImages.length === 0 &&
+      Array.isArray(product.images) &&
+      product.images.length > 0
+    ) {
+      console.warn(
+        `[Upload] WARNING: No images available. All ${product.images.length} images failed to upload. Product will be created without images.`,
+      );
       // Don't throw error - allow product creation without images
       // User can manually add images later or retry the job
     } else if (uploadedImages.length > 0) {
-      console.log(`[Upload] Images ready for product: ${uploadedImages.length} images`);
+      console.log(
+        `[Upload] Images ready for product: ${uploadedImages.length} images`,
+      );
     }
 
     const body = {
@@ -806,7 +920,7 @@ export class ProductsService {
       categories: categoryArray,
       images: uploadedImages.length > 0 ? uploadedImages : undefined,
     };
-    
+
     console.log('[Upload] Uploading product to WooCommerce:', {
       productTitle: product.title,
       categoryArray,
@@ -814,8 +928,13 @@ export class ProductsService {
       productCategory: product.category,
       productCategoryId: product.categoryId,
       imagesCount: uploadedImages.length,
-      totalImagesAttempted: Array.isArray(product.images) ? product.images.length : 0,
-      images: uploadedImages.length > 0 ? uploadedImages.map(img => img.src) : 'NO IMAGES',
+      totalImagesAttempted: Array.isArray(product.images)
+        ? product.images.length
+        : 0,
+      images:
+        uploadedImages.length > 0
+          ? uploadedImages.map((img) => img.src)
+          : 'NO IMAGES',
     });
 
     const res = await fetch(endpoint, {
@@ -826,21 +945,24 @@ export class ProductsService {
       },
       body: JSON.stringify(body),
     });
-    
+
     const responseText = await res.text();
     let responseData: any;
-    
+
     try {
       responseData = JSON.parse(responseText);
     } catch (e) {
-      throw new Error(`WooCommerce API returned invalid JSON: ${responseText.substring(0, 200)}`);
+      throw new Error(
+        `WooCommerce API returned invalid JSON: ${responseText.substring(0, 200)}`,
+      );
     }
-    
+
     if (!res.ok) {
-      const errorMessage = responseData?.message || responseData?.code || responseText;
+      const errorMessage =
+        responseData?.message || responseData?.code || responseText;
       throw new Error(`WooCommerce API error (${res.status}): ${errorMessage}`);
     }
-    
+
     // Validate that product was actually created
     if (!responseData || !responseData.id) {
       console.error('WooCommerce response missing product ID:', {
@@ -849,16 +971,17 @@ export class ProductsService {
         endpoint,
         productTitle: product.title,
       });
-      throw new Error(`WooCommerce API returned success but no product ID. Response: ${JSON.stringify(responseData).substring(0, 200)}`);
+      throw new Error(
+        `WooCommerce API returned success but no product ID. Response: ${JSON.stringify(responseData).substring(0, 200)}`,
+      );
     }
-    
+
     console.log(`Successfully uploaded product to WooCommerce:`, {
       productId: responseData.id,
       productTitle: product.title,
       siteUrl: site.baseUrl,
     });
-    
+
     return responseData;
   }
 }
-

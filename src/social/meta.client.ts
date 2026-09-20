@@ -1,4 +1,10 @@
-import { BadGatewayException, BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export const GRAPH_VERSION = 'v26.0';
@@ -81,7 +87,9 @@ export class MetaClient {
   constructor(private readonly config: ConfigService) {}
 
   get configured(): boolean {
-    return Boolean(this.config.get('META_APP_ID') && this.config.get('META_APP_SECRET'));
+    return Boolean(
+      this.config.get('META_APP_ID') && this.config.get('META_APP_SECRET'),
+    );
   }
 
   redirectUri(): string {
@@ -90,7 +98,9 @@ export class MetaClient {
 
   authUrl(state: string): string {
     if (!this.configured) {
-      throw new BadRequestException('Chưa cấu hình META_APP_ID / META_APP_SECRET trong .env');
+      throw new BadRequestException(
+        'Chưa cấu hình META_APP_ID / META_APP_SECRET trong .env',
+      );
     }
     const params = new URLSearchParams({
       client_id: this.config.get<string>('META_APP_ID')!,
@@ -104,35 +114,52 @@ export class MetaClient {
 
   /** Đổi code lấy token ngắn hạn (~1-2 giờ). */
   async exchangeCode(code: string): Promise<string> {
-    const data = await this.get<{ access_token: string }>('/oauth/access_token', {
-      client_id: this.config.get<string>('META_APP_ID')!,
-      client_secret: this.config.get<string>('META_APP_SECRET')!,
-      redirect_uri: this.redirectUri(),
-      code,
-    });
+    const data = await this.get<{ access_token: string }>(
+      '/oauth/access_token',
+      {
+        client_id: this.config.get<string>('META_APP_ID')!,
+        client_secret: this.config.get<string>('META_APP_SECRET')!,
+        redirect_uri: this.redirectUri(),
+        code,
+      },
+    );
     return data.access_token;
   }
 
   /** Đổi sang token dài hạn (~60 ngày). Facebook không có refresh token. */
   async exchangeLongLived(shortLivedToken: string): Promise<string> {
-    const data = await this.get<{ access_token: string }>('/oauth/access_token', {
-      grant_type: 'fb_exchange_token',
-      client_id: this.config.get<string>('META_APP_ID')!,
-      client_secret: this.config.get<string>('META_APP_SECRET')!,
-      fb_exchange_token: shortLivedToken,
-    });
+    const data = await this.get<{ access_token: string }>(
+      '/oauth/access_token',
+      {
+        grant_type: 'fb_exchange_token',
+        client_id: this.config.get<string>('META_APP_ID')!,
+        client_secret: this.config.get<string>('META_APP_SECRET')!,
+        fb_exchange_token: shortLivedToken,
+      },
+    );
     return data.access_token;
   }
 
   /** Token còn sống không, của ai, quyền gì, hết hạn khi nào. */
-  async inspectToken(token: string): Promise<{ userId: string; scopes: string[]; expiresAt: Date | null }> {
+  async inspectToken(
+    token: string,
+  ): Promise<{ userId: string; scopes: string[]; expiresAt: Date | null }> {
     if (this.configured) {
       const appToken = `${this.config.get('META_APP_ID')}|${this.config.get('META_APP_SECRET')}`;
       const data = await this.get<{
-        data: { user_id?: string; scopes?: string[]; expires_at?: number; is_valid?: boolean; error?: GraphError };
+        data: {
+          user_id?: string;
+          scopes?: string[];
+          expires_at?: number;
+          is_valid?: boolean;
+          error?: GraphError;
+        };
       }>('/debug_token', { input_token: token, access_token: appToken });
       const info = data.data;
-      if (!info?.is_valid) throw new MetaAuthError(info?.error?.message ?? 'Token không hợp lệ hoặc đã hết hạn');
+      if (!info?.is_valid)
+        throw new MetaAuthError(
+          info?.error?.message ?? 'Token không hợp lệ hoặc đã hết hạn',
+        );
       return {
         userId: String(info.user_id ?? ''),
         scopes: info.scopes ?? [],
@@ -142,16 +169,24 @@ export class MetaClient {
     }
     // Luồng dán token thủ công khi chưa cấu hình App ID/Secret
     const me = await this.get<{ id: string }>('/me', { fields: 'id' }, token);
-    const perms = await this.get<{ data: { permission: string; status: string }[] }>('/me/permissions', {}, token);
+    const perms = await this.get<{
+      data: { permission: string; status: string }[];
+    }>('/me/permissions', {}, token);
     return {
       userId: me.id,
-      scopes: perms.data.filter((p) => p.status === 'granted').map((p) => p.permission),
+      scopes: perms.data
+        .filter((p) => p.status === 'granted')
+        .map((p) => p.permission),
       expiresAt: null,
     };
   }
 
   async me(token: string): Promise<{ id: string; name: string }> {
-    const data = await this.get<{ id: string; name?: string }>('/me', { fields: 'id,name' }, token);
+    const data = await this.get<{ id: string; name?: string }>(
+      '/me',
+      { fields: 'id,name' },
+      token,
+    );
     return { id: data.id, name: data.name ?? 'Tài khoản Facebook' };
   }
 
@@ -159,7 +194,10 @@ export class MetaClient {
   async listPages(userToken: string): Promise<MetaPage[]> {
     const res = await this.get<{ data?: MetaPage[] }>(
       '/me/accounts',
-      { fields: 'id,name,category,access_token,tasks,picture{url}', limit: '100' },
+      {
+        fields: 'id,name,category,access_token,tasks,picture{url}',
+        limit: '100',
+      },
       userToken,
     );
     return res.data ?? [];
@@ -169,13 +207,25 @@ export class MetaClient {
    * Tải ảnh lên Page ở dạng CHƯA đăng để gắn vào bài sau. Bài hẹn giờ bắt buộc temporary=true,
    * nếu không Facebook từ chối bài có ảnh chưa công khai.
    */
-  async uploadPagePhoto(pageId: string, pageToken: string, jpeg: Buffer, temporary: boolean): Promise<string> {
+  async uploadPagePhoto(
+    pageId: string,
+    pageToken: string,
+    jpeg: Buffer,
+    temporary: boolean,
+  ): Promise<string> {
     const form = new FormData();
     form.append('published', 'false');
     if (temporary) form.append('temporary', 'true');
     form.append('access_token', pageToken);
-    form.append('source', new Blob([new Uint8Array(jpeg)], { type: 'image/jpeg' }), 'photo.jpg');
-    const res = await this.request<{ id: string }>(`${GRAPH_URL}/${pageId}/photos`, { method: 'POST', body: form });
+    form.append(
+      'source',
+      new Blob([new Uint8Array(jpeg)], { type: 'image/jpeg' }),
+      'photo.jpg',
+    );
+    const res = await this.request<{ id: string }>(
+      `${GRAPH_URL}/${pageId}/photos`,
+      { method: 'POST', body: form },
+    );
     return res.id;
   }
 
@@ -186,7 +236,12 @@ export class MetaClient {
   async publishPagePost(
     pageId: string,
     pageToken: string,
-    input: { message: string; link?: string | null; photoIds: string[]; scheduledAt?: Date },
+    input: {
+      message: string;
+      link?: string | null;
+      photoIds: string[];
+      scheduledAt?: Date;
+    },
   ): Promise<string> {
     const params: Record<string, string> = { message: input.message };
     if (input.link) params.link = input.link;
@@ -195,17 +250,26 @@ export class MetaClient {
     });
     if (input.scheduledAt) {
       params.published = 'false';
-      params.scheduled_publish_time = String(Math.floor(input.scheduledAt.getTime() / 1000));
+      params.scheduled_publish_time = String(
+        Math.floor(input.scheduledAt.getTime() / 1000),
+      );
       params.unpublished_content_type = 'SCHEDULED';
     }
-    const res = await this.post<{ id: string }>(`/${pageId}/feed`, params, pageToken);
+    const res = await this.post<{ id: string }>(
+      `/${pageId}/feed`,
+      params,
+      pageToken,
+    );
     return res.id;
   }
 
   async getPagePost(postId: string, pageToken: string): Promise<MetaPagePost> {
     return this.get<MetaPagePost>(
       `/${postId}`,
-      { fields: 'id,message,created_time,permalink_url,full_picture,is_published,attachments{type,unshimmed_url}' },
+      {
+        fields:
+          'id,message,created_time,permalink_url,full_picture,is_published,attachments{type,unshimmed_url}',
+      },
       pageToken,
     );
   }
@@ -219,7 +283,10 @@ export class MetaClient {
     pageToken: string,
     after?: string,
   ): Promise<{ posts: MetaPagePost[]; nextCursor: string | null }> {
-    const res = await this.get<{ data?: MetaPagePost[]; paging?: { next?: string; cursors?: { after?: string } } }>(
+    const res = await this.get<{
+      data?: MetaPagePost[];
+      paging?: { next?: string; cursors?: { after?: string } };
+    }>(
       `/${pageId}/posts`,
       {
         fields:
@@ -231,11 +298,17 @@ export class MetaClient {
       },
       pageToken,
     );
-    return { posts: res.data ?? [], nextCursor: res.paging?.next ? (res.paging.cursors?.after ?? null) : null };
+    return {
+      posts: res.data ?? [],
+      nextCursor: res.paging?.next ? (res.paging.cursors?.after ?? null) : null,
+    };
   }
 
   async deletePagePost(postId: string, pageToken: string): Promise<void> {
-    await this.request(`${GRAPH_URL}/${postId}?${new URLSearchParams({ access_token: pageToken })}`, { method: 'DELETE' });
+    await this.request(
+      `${GRAPH_URL}/${postId}?${new URLSearchParams({ access_token: pageToken })}`,
+      { method: 'DELETE' },
+    );
   }
 
   /** Tải ảnh của bài từ CDN Facebook về máy chủ (tối đa 15MB). */
@@ -250,16 +323,27 @@ export class MetaClient {
       throw new BadGatewayException('Không tải được ảnh của bài từ Facebook');
     }
     const size = Number(res.headers.get('content-length') ?? 0);
-    if (!res.ok || size > 15 * 1024 * 1024) throw new BadGatewayException('Không tải được ảnh của bài từ Facebook');
+    if (!res.ok || size > 15 * 1024 * 1024)
+      throw new BadGatewayException('Không tải được ảnh của bài từ Facebook');
     return Buffer.from(await res.arrayBuffer());
   }
 
-  private get<T>(path: string, params: Record<string, string>, token?: string): Promise<T> {
-    const query = new URLSearchParams(token ? { ...params, access_token: token } : params);
+  private get<T>(
+    path: string,
+    params: Record<string, string>,
+    token?: string,
+  ): Promise<T> {
+    const query = new URLSearchParams(
+      token ? { ...params, access_token: token } : params,
+    );
     return this.request<T>(`${GRAPH_URL}${path}?${query}`);
   }
 
-  private post<T>(path: string, params: Record<string, string>, token: string): Promise<T> {
+  private post<T>(
+    path: string,
+    params: Record<string, string>,
+    token: string,
+  ): Promise<T> {
     return this.request<T>(`${GRAPH_URL}${path}`, {
       method: 'POST',
       body: new URLSearchParams({ ...params, access_token: token }),
@@ -272,23 +356,39 @@ export class MetaClient {
       res = await fetch(url, { ...init, signal: AbortSignal.timeout(60_000) });
     } catch (e) {
       this.logger.error(`Không gọi được Graph API: ${String(e)}`);
-      throw new BadGatewayException('Không kết nối được Facebook, vui lòng thử lại');
+      throw new BadGatewayException(
+        'Không kết nối được Facebook, vui lòng thử lại',
+      );
     }
-    const json = (await res.json().catch(() => null)) as (T & { error?: GraphError }) | null;
-    if (!json) throw new BadGatewayException(`Facebook trả về phản hồi không hợp lệ (HTTP ${res.status})`);
+    const json = (await res.json().catch(() => null)) as
+      | (T & { error?: GraphError })
+      | null;
+    if (!json)
+      throw new BadGatewayException(
+        `Facebook trả về phản hồi không hợp lệ (HTTP ${res.status})`,
+      );
 
     const error = json.error;
     if (error) {
-      const message = error.error_user_msg || error.message || 'Lỗi không xác định từ Facebook';
-      this.logger.warn(`Graph API lỗi ${error.code}/${error.error_subcode}: ${message}`);
-      if (AUTH_CODES.has(error.code ?? 0)) throw new MetaAuthError(`Facebook: ${message}`);
+      const message =
+        error.error_user_msg ||
+        error.message ||
+        'Lỗi không xác định từ Facebook';
+      this.logger.warn(
+        `Graph API lỗi ${error.code}/${error.error_subcode}: ${message}`,
+      );
+      if (AUTH_CODES.has(error.code ?? 0))
+        throw new MetaAuthError(`Facebook: ${message}`);
       if (RATE_LIMIT_CODES.has(error.code ?? 0)) {
-        throw new ConflictException('Facebook đang giới hạn tần suất, vui lòng thử lại sau vài phút');
+        throw new ConflictException(
+          'Facebook đang giới hạn tần suất, vui lòng thử lại sau vài phút',
+        );
       }
       // Facebook từ chối vì nội dung / tham số: câu của Facebook đủ cụ thể để hiện cho người dùng
       throw new BadRequestException(`Facebook: ${message}`);
     }
-    if (!res.ok) throw new BadGatewayException(`Facebook trả về HTTP ${res.status}`);
+    if (!res.ok)
+      throw new BadGatewayException(`Facebook trả về HTTP ${res.status}`);
     return json;
   }
 }

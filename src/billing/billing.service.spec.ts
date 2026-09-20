@@ -33,7 +33,8 @@ function fakePrisma(initialBalance: number) {
         await tick();
         // Từ đây tới hết hàm là một bước duy nhất, giống UPDATE ... WHERE của Postgres.
         if (!state.exists || where.id !== 'u1') return { count: 0 };
-        if (where.balance && state.balance < where.balance.gte) return { count: 0 };
+        if (where.balance && state.balance < where.balance.gte)
+          return { count: 0 };
         state.balance -= data.balance.decrement ?? 0;
         return { count: 1 };
       },
@@ -67,7 +68,9 @@ describe('BillingService.debit', () => {
     expect(ok).toHaveLength(1);
     expect(state.balance).toBe(300);
 
-    const failed = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    const failed = results.find(
+      (r) => r.status === 'rejected',
+    ) as PromiseRejectedResult;
     expect(failed.reason).toBeInstanceOf(BadRequestException);
     expect((failed.reason as Error).message).toContain('Số dư không đủ');
   });
@@ -76,11 +79,20 @@ describe('BillingService.debit', () => {
     const { prisma, state } = fakePrisma(1000);
     const billing = new BillingService(prisma);
 
-    const { user, transaction } = await billing.debit('u1', 300, 'VIDEO:1', 'Tạo video');
+    const { user, transaction } = await billing.debit(
+      'u1',
+      300,
+      'VIDEO:1',
+      'Tạo video',
+    );
 
     expect(user.balance).toBe(700);
     expect(state.balance).toBe(700);
-    expect(transaction).toMatchObject({ amount: -300, type: 'DEBIT', reference: 'VIDEO:1' });
+    expect(transaction).toMatchObject({
+      amount: -300,
+      type: 'DEBIT',
+      reference: 'VIDEO:1',
+    });
   });
 
   it('không có người dùng thì báo không tìm thấy, không phải thiếu tiền', async () => {
@@ -88,15 +100,21 @@ describe('BillingService.debit', () => {
     state.exists = false;
     const billing = new BillingService(prisma);
 
-    await expect(billing.debit('u1', 100)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(billing.debit('u1', 100)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 
   it('số tiền không hợp lệ thì chặn ngay, chưa đụng tới số dư', async () => {
     const { prisma, state } = fakePrisma(1000);
     const billing = new BillingService(prisma);
 
-    await expect(billing.debit('u1', 0)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(billing.debit('u1', -50)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(billing.debit('u1', 0)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(billing.debit('u1', -50)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(state.balance).toBe(1000);
   });
 });

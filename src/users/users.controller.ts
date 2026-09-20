@@ -22,5 +22,3 @@ export class UsersController {
     return this.users.createUser(body);
   }
 }
-
-

@@ -8,7 +8,13 @@ import { AuthModule } from '../auth/auth.module';
 import { ShopeeModule } from '../shopee/shopee.module';
 
 @Module({
-  imports: [BillingModule, UploadModule, ApiKeysModule, AuthModule, ShopeeModule],
+  imports: [
+    BillingModule,
+    UploadModule,
+    ApiKeysModule,
+    AuthModule,
+    ShopeeModule,
+  ],
   providers: [ProductsService],
   controllers: [ProductsController],
   exports: [ProductsService],

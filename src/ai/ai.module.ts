@@ -13,6 +13,7 @@ import { ContentService } from './content.service';
 import { GeminiClient } from './gemini.client';
 import { McpController } from './mcp.controller';
 import { PointsService } from './points.service';
+import { StoryService } from './story.service';
 import { AiToolsService } from './tools';
 
 /**
@@ -20,9 +21,32 @@ import { AiToolsService } from './tools';
  * cho agent bên ngoài. Dùng lại VideoModule / ProductsModule / SocialModule sẵn có.
  */
 @Module({
-  imports: [AuthModule, ApiKeysModule, SettingsModule, SocialModule, VideoModule, ProductsModule, BillingModule],
-  providers: [GeminiClient, PointsService, ContentService, ActionsService, AiToolsService, ChatService],
+  imports: [
+    AuthModule,
+    ApiKeysModule,
+    SettingsModule,
+    SocialModule,
+    VideoModule,
+    ProductsModule,
+    BillingModule,
+  ],
+  providers: [
+    GeminiClient,
+    PointsService,
+    ContentService,
+    ActionsService,
+    AiToolsService,
+    ChatService,
+    StoryService,
+  ],
   controllers: [AiController, McpController],
-  exports: [GeminiClient, PointsService, ContentService, ActionsService, AiToolsService],
+  exports: [
+    GeminiClient,
+    PointsService,
+    ContentService,
+    ActionsService,
+    AiToolsService,
+    StoryService,
+  ],
 })
 export class AiModule {}

@@ -1,12 +1,12 @@
-import { Request } from 'express'
-import { UserRole } from '@prisma/client'
+import { Request } from 'express';
+import { UserRole } from '@prisma/client';
 
 export interface AuthenticatedRequest extends Request {
   user: {
-    userId: string
-    role?: UserRole
-    username?: string
-    permissions?: string[]
-    isApiKey?: boolean
-  }
+    userId: string;
+    role?: UserRole;
+    username?: string;
+    permissions?: string[];
+    isApiKey?: boolean;
+  };
 }

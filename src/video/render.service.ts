@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SettingsService } from '../settings/settings.service';
+import { concatMp4, lastFrameJpeg } from './ffmpeg.util';
+import {
+  buildClipPrompt,
+  type StoryScene,
+  type StorySetting,
+} from './story.prompt';
 
 /** Dữ liệu sản phẩm để dựng video. */
 export interface VideoProductInput {
@@ -9,6 +15,28 @@ export interface VideoProductInput {
   price?: number | null;
   originalPrice?: number | null;
   images: string[];
+}
+
+/** Ảnh đưa vào model video: base64 + mime đã chuẩn hoá. */
+export interface InlineImage {
+  data: string;
+  mime: string;
+}
+
+/** Video "một người nói chuyện": kịch bản đã được người dùng duyệt ở bước trước. */
+export interface StoryVideoInput {
+  scenes: StoryScene[];
+  /** Ảnh chân dung người dùng tải lên; không có thì AI tự tạo nhân vật. */
+  portrait?: InlineImage;
+  presenter?: string;
+  setting?: StorySetting;
+}
+
+export interface StoryRenderResult {
+  videoBuffer: Buffer;
+  durationSec: number;
+  /** Prompt thật sự đã gửi cho model, lưu lại để tra khi video ra không như ý. */
+  prompts: string[];
 }
 
 export interface RenderResult {
@@ -49,7 +77,9 @@ export class RenderService {
     return this.config.get<string>('GEMINI_TEXT_MODEL') || 'gemini-2.5-flash';
   }
   private get veoModel(): string {
-    return this.config.get<string>('VEO_MODEL') || 'veo-3.1-lite-generate-preview';
+    return (
+      this.config.get<string>('VEO_MODEL') || 'veo-3.1-lite-generate-preview'
+    );
   }
   private get omniModel(): string {
     return this.config.get<string>('OMNI_MODEL') || 'gemini-omni-flash-preview';
@@ -58,8 +88,25 @@ export class RenderService {
    *  Ưu tiên setting DB (đổi qua admin) -> env -> mặc định omni. */
   async resolveEngine(): Promise<string> {
     const s = await this.settings.get('VIDEO_ENGINE');
-    return (s || this.config.get<string>('VIDEO_ENGINE') || 'omni').toLowerCase();
+    return (
+      s ||
+      this.config.get<string>('VIDEO_ENGINE') ||
+      'omni'
+    ).toLowerCase();
   }
+  /**
+   * Engine cho video kể chuyện. Mặc định **veo**: Veo sinh lời thoại kèm khẩu hình,
+   * còn Omni thiên về quay sản phẩm. Đổi qua setting STORY_ENGINE nếu cần thử.
+   */
+  async resolveStoryEngine(): Promise<string> {
+    const s = await this.settings.get('STORY_ENGINE');
+    return (
+      s ||
+      this.config.get<string>('STORY_ENGINE') ||
+      'veo'
+    ).toLowerCase();
+  }
+
   private headers() {
     return { 'x-goog-api-key': this.key(), 'Content-Type': 'application/json' };
   }
@@ -78,7 +125,8 @@ export class RenderService {
     caption: string;
   }> {
     // Nhịp kịch bản khớp độ dài engine đang dùng (Omni ~10s, Veo 8s).
-    const durSec = (await this.resolveEngine()) === 'veo' ? VEO_DURATION : OMNI_DURATION;
+    const durSec =
+      (await this.resolveEngine()) === 'veo' ? VEO_DURATION : OMNI_DURATION;
     const prompt = `Bạn là đạo diễn quảng cáo sản phẩm. Video dọc 9:16 ~${durSec}s, đăng Facebook gắn LINK AFFILIATE, quay-thật, nổi bật sản phẩm để kích thích mua.
 Sản phẩm: ${p.title}${p.category ? ` (loại: ${p.category})` : ''}, giá ${this.vnd(p.price)}${p.originalPrice ? ` (gốc ${this.vnd(p.originalPrice)})` : ''}.
 
@@ -101,10 +149,13 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
     );
     const j: any = await res.json();
     if (!res.ok) {
-      throw new Error(`Gemini lỗi ${res.status}: ${JSON.stringify(j).slice(0, 300)}`);
+      throw new Error(
+        `Gemini lỗi ${res.status}: ${JSON.stringify(j).slice(0, 300)}`,
+      );
     }
     const text =
-      j?.candidates?.[0]?.content?.parts?.map((x: any) => x.text).join('') || '';
+      j?.candidates?.[0]?.content?.parts?.map((x: any) => x.text).join('') ||
+      '';
     let parsed: any;
     try {
       parsed = JSON.parse(text);
@@ -130,9 +181,7 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
   }
 
   /** Tải ảnh sản phẩm -> base64 (Veo cần ảnh khởi tạo). */
-  private async fetchImageBase64(
-    url: string,
-  ): Promise<{ data: string; mime: string }> {
+  private async fetchImageBase64(url: string): Promise<InlineImage> {
     const r = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0',
@@ -147,7 +196,14 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
       .trim()
       .toLowerCase();
     if (mime === 'image/jpg') mime = 'image/jpeg';
-    const allowed = ['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif', 'image/gif'];
+    const allowed = [
+      'image/png',
+      'image/jpeg',
+      'image/webp',
+      'image/heic',
+      'image/heif',
+      'image/gif',
+    ];
     if (!allowed.includes(mime)) mime = 'image/jpeg';
     return { data: buf.toString('base64'), mime };
   }
@@ -177,15 +233,29 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
       urls.map((u) => this.fetchImageBase64(u)),
     );
     const imgs = settled
-      .filter((s): s is PromiseFulfilledResult<{ data: string; mime: string }> => s.status === 'fulfilled')
+      .filter(
+        (s): s is PromiseFulfilledResult<InlineImage> =>
+          s.status === 'fulfilled',
+      )
       .map((s) => s.value);
-    if (imgs.length === 0) throw new Error('Không tải được ảnh nào để tạo video');
-    this.logger.log(`Omni: đưa ${imgs.length}/${urls.length} ảnh vào tạo video`);
+    if (imgs.length === 0)
+      throw new Error('Không tải được ảnh nào để tạo video');
+    this.logger.log(
+      `Omni: đưa ${imgs.length}/${urls.length} ảnh vào tạo video`,
+    );
+    return this.omniPredict(imgs, prompt);
+  }
 
+  /** Gọi Omni với ảnh đã có sẵn dạng base64 (video kể chuyện dùng đường này). */
+  async omniPredict(imgs: InlineImage[], prompt: string): Promise<Buffer> {
     const body = JSON.stringify({
       model: this.omniModel,
       input: [
-        ...imgs.map((im) => ({ type: 'image', data: im.data, mime_type: im.mime })),
+        ...imgs.map((im) => ({
+          type: 'image',
+          data: im.data,
+          mime_type: im.mime,
+        })),
         { type: 'text', text: prompt },
       ],
     });
@@ -239,8 +309,15 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
 
   /** Veo 3.1 tạo video 8s 1080p từ ảnh sản phẩm. Trả Buffer mp4 (đã có nhạc native). */
   async generateVideoVeo(imageUrl: string, veoPrompt: string): Promise<Buffer> {
+    return this.veoPredict(veoPrompt, await this.fetchImageBase64(imageUrl));
+  }
+
+  /**
+   * Gọi Veo với ảnh đã có sẵn dạng base64. KHÔNG truyền ảnh thì Veo tự dựng hình
+   * từ mô tả (dùng cho video kể chuyện khi người dùng không tải ảnh chân dung lên).
+   */
+  async veoPredict(veoPrompt: string, img?: InlineImage): Promise<Buffer> {
     const key = this.key();
-    const img = await this.fetchImageBase64(imageUrl);
 
     const start = await fetch(
       `${GBASE}/models/${this.veoModel}:predictLongRunning`,
@@ -251,35 +328,53 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
           instances: [
             {
               prompt: veoPrompt,
-              image: { bytesBase64Encoded: img.data, mimeType: img.mime },
+              ...(img
+                ? {
+                    image: { bytesBase64Encoded: img.data, mimeType: img.mime },
+                  }
+                : {}),
             },
           ],
-          parameters: { aspectRatio: '9:16', resolution: '1080p', durationSeconds: VEO_DURATION },
+          parameters: {
+            aspectRatio: '9:16',
+            resolution: '1080p',
+            durationSeconds: VEO_DURATION,
+          },
         }),
       },
     );
     const sj: any = await start.json();
     if (!start.ok) {
-      throw new Error(`Veo start lỗi ${start.status}: ${JSON.stringify(sj).slice(0, 400)}`);
+      throw new Error(
+        `Veo start lỗi ${start.status}: ${JSON.stringify(sj).slice(0, 400)}`,
+      );
     }
     const op = sj.name;
-    if (!op) throw new Error(`Veo không trả operation: ${JSON.stringify(sj).slice(0, 200)}`);
+    if (!op)
+      throw new Error(
+        `Veo không trả operation: ${JSON.stringify(sj).slice(0, 200)}`,
+      );
     this.logger.log(`Veo (${this.veoModel}) đang render: ${op}`);
 
     const t0 = Date.now();
     const TIMEOUT = 6 * 60 * 1000;
     while (true) {
-      if (Date.now() - t0 > TIMEOUT) throw new Error('Veo quá thời gian chờ (6 phút)');
+      if (Date.now() - t0 > TIMEOUT)
+        throw new Error('Veo quá thời gian chờ (6 phút)');
       await new Promise((r) => setTimeout(r, 10000));
       const st: any = await (
         await fetch(`${GBASE}/${op}`, { headers: { 'x-goog-api-key': key } })
       ).json();
-      if (st.error) throw new Error(`Veo lỗi: ${JSON.stringify(st.error).slice(0, 300)}`);
+      if (st.error)
+        throw new Error(`Veo lỗi: ${JSON.stringify(st.error).slice(0, 300)}`);
       if (st.done) {
         const uri =
-          st?.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri ||
-          st?.response?.generatedVideos?.[0]?.video?.uri;
-        if (!uri) throw new Error(`Veo xong nhưng thiếu uri: ${JSON.stringify(st).slice(0, 300)}`);
+          st?.response?.generateVideoResponse?.generatedSamples?.[0]?.video
+            ?.uri || st?.response?.generatedVideos?.[0]?.video?.uri;
+        if (!uri)
+          throw new Error(
+            `Veo xong nhưng thiếu uri: ${JSON.stringify(st).slice(0, 300)}`,
+          );
         const vid = await fetch(uri, { headers: { 'x-goog-api-key': key } });
         if (!vid.ok) throw new Error(`Tải video Veo lỗi ${vid.status}`);
         return Buffer.from(await vid.arrayBuffer());
@@ -287,12 +382,69 @@ CHỈ trả JSON các thành phần sau (KHÔNG viết cả prompt, hệ thống
     }
   }
 
+  /**
+   * Sinh video "một người nói chuyện" từ kịch bản NGƯỜI DÙNG ĐÃ DUYỆT.
+   *
+   * Mỗi cảnh là một clip riêng (model video chỉ dựng được ~8s/lần), sau đó nối lại.
+   * Giữ cho các clip trông như cùng một người:
+   *  - có ảnh chân dung: mọi clip đều khởi tạo từ chính ảnh đó;
+   *  - không có ảnh: clip sau khởi tạo từ khung hình cuối của clip trước, vì nếu để
+   *    model tự dựng lại từ chữ thì mỗi clip ra một người khác.
+   */
+  async renderStoryVideo(input: StoryVideoInput): Promise<StoryRenderResult> {
+    const total = input.scenes.length;
+    if (total === 0) throw new Error('Kịch bản chưa có cảnh nào');
+
+    const engine = await this.resolveStoryEngine();
+    if (engine === 'omni' && !input.portrait) {
+      throw new Error(
+        'Engine Omni cần ảnh chân dung. Hãy tải ảnh lên, hoặc đổi STORY_ENGINE về veo.',
+      );
+    }
+
+    const parts: Buffer[] = [];
+    const prompts: string[] = [];
+    let reference = input.portrait;
+
+    for (const [i, scene] of input.scenes.entries()) {
+      const prompt = buildClipPrompt({
+        scene,
+        hasPortrait: Boolean(input.portrait),
+        presenter: input.presenter,
+        setting: input.setting,
+        index: i + 1,
+        total,
+      });
+      prompts.push(prompt);
+      this.logger.log(`Story: dựng clip ${i + 1}/${total} bằng ${engine}`);
+
+      const clip =
+        engine === 'omni'
+          ? await this.omniPredict(reference ? [reference] : [], prompt)
+          : await this.veoPredict(prompt, reference);
+      parts.push(clip);
+
+      // Không có ảnh chân dung: lấy khung cuối làm ảnh mồi cho clip kế tiếp.
+      if (!input.portrait && i + 1 < total) {
+        reference = await lastFrameJpeg(clip);
+      }
+    }
+
+    const perClip = engine === 'omni' ? OMNI_DURATION : VEO_DURATION;
+    return {
+      videoBuffer: await concatMp4(parts),
+      durationSec: perClip * total,
+      prompts,
+    };
+  }
+
   /** Sinh trọn 1 video sản phẩm: Gemini script -> Veo video. */
   async renderProductVideo(p: VideoProductInput): Promise<RenderResult> {
     const images = (p.images || []).filter(
       (u) => typeof u === 'string' && u.trim().length > 0,
     );
-    if (images.length === 0) throw new Error('Sản phẩm không có ảnh để tạo video');
+    if (images.length === 0)
+      throw new Error('Sản phẩm không có ảnh để tạo video');
 
     const capped = images.slice(0, MAX_VIDEO_IMAGES);
     const script = await this.generateScript({ ...p, images: capped });
