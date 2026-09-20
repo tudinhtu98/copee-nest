@@ -204,8 +204,26 @@ bật cả bot Telegram bằng token thật.
 Sao lưu trước nếu lần này có migration:
 
 ```bash
-pg_dump "$DATABASE_URL" > ~/copee-$(date +%F-%H%M).sql
+sudo -u postgres pg_dump copee > ~/copee-$(date +%F-%H%M).sql
+chmod 600 ~/copee-*.sql
 ```
+
+Đổi `copee` thành tên database thật — là đoạn cuối của `DATABASE_URL` trong `.env`.
+
+> **Đừng chạy `pg_dump "$DATABASE_URL"` thẳng trên server.** Biến đó chỉ nằm trong
+> `.env`, không có trong shell, nên lệnh thành `pg_dump ""` và Postgres quay về mặc
+> định: hỏi mật khẩu của user trùng tên user Linux đang đăng nhập (thường là `root`),
+> mà user Postgres đó không tồn tại nên nhập gì cũng không vào.
+>
+> Chạy `sudo -u postgres` thì Postgres tin theo user hệ điều hành, khỏi mật khẩu. Nếu
+> vẫn muốn dùng đúng `DATABASE_URL` thì nạp file trước — nhưng cách này đưa cả token
+> Telegram và khoá mã hoá vào shell, xong việc nhớ thoát shell đó ra:
+> ```bash
+> cd /var/www/copee/backend && set -a; . ./.env; set +a
+> ```
+>
+> File dump chứa mật khẩu đã băm và token Facebook đã mã hoá của toàn bộ người dùng.
+> Để quyền `600` và đừng bỏ quên nó trong thư mục home.
 
 **Backend trước, frontend sau** — web gọi API, làm ngược lại thì web lỗi 404 một lúc.
 
