@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Đẩy liên tiếp lên cùng một nhánh thì huỷ lần chạy cũ cho đỡ tốn thời gian máy chạy
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Kiểm tra kiểu, chạy test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Máy chạy CI không có file .env. Test hiện tại đều dùng dữ liệu giả, không nối
+      # database hay gọi API thật, nhưng vẫn cấp sẵn biến bắt buộc để phòng khi thêm test
+      # cần đọc cấu hình. Toàn bộ là giá trị giả — không phải bí mật thật.
+      DATABASE_URL: postgresql://copee:copee@localhost:5432/copee_ci
+      # base64 của đúng 32 byte, bắt buộc với AES-256-GCM
+      ENCRYPTION_KEYS: 1:Y2ktdGVzdC1rZXktZG8tbm90LXVzZS1pbi1wcm9kISE=
+      ENCRYPTION_ACTIVE_KEY_VERSION: '1'
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cài đặt phụ thuộc
+        # npm ci: dừng ngay nếu package-lock.json lệch với package.json
+        run: npm ci
+
+      - name: Sinh Prisma Client
+        # Dự án không có postinstall, mà thiếu client thì tsc không biết kiểu của model
+        run: npx prisma generate
+
+      - name: Kiểm tra kiểu TypeScript
+        run: npx tsc -p tsconfig.json --noEmit
+
+      - name: Chạy test
+        run: npm test
+
+      - name: Build production
+        run: npm run build
+
+      # Chưa bật lint: `npm run lint` hiện báo hơn 1.600 lỗi có sẵn (phần lớn là prettier
+      # và no-unsafe-* ở src/video, src/telegram). Dọn xong thì thêm bước chạy
+      # `npx eslint "{src,test}/**/*.ts"` (không kèm --fix) vào đây.

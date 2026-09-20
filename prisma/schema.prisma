@@ -8,26 +8,32 @@ datasource db {
 }
 
 model User {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  username     String         @unique
-  passwordHash String?        @map("password_hash") // Optional for OAuth users
-  googleId     String?        @unique @map("google_id") // Google OAuth ID
-  name         String?        // Full name from OAuth
-  image        String?        // Profile image from OAuth
-  role         UserRole       @default(USER)
-  balance      Int            @default(10000)
-  bannedAt     DateTime?      @map("banned_at")
-  telegramId   String?        @unique @map("telegram_id") // Chat id Telegram đã liên kết để nhận video qua bot
-  shopeeAffiliateId String?   @map("shopee_affiliate_id") // Affiliate ID Shopee của user, dùng để tạo link aff cho sản phẩm
-  createdAt    DateTime       @default(now()) @map("created_at")
-  updatedAt    DateTime       @updatedAt @map("updated_at")
-  products     Product[]
-  sites        Site[]
-  transactions Transaction[]
-  refreshTokens RefreshToken[]
-  apiKeys      ApiKey[]
-  videoJobs    VideoJob[]
+  id                String             @id @default(cuid())
+  email             String             @unique
+  username          String             @unique
+  passwordHash      String?            @map("password_hash") // Optional for OAuth users
+  googleId          String?            @unique @map("google_id") // Google OAuth ID
+  name              String? // Full name from OAuth
+  image             String? // Profile image from OAuth
+  role              UserRole           @default(USER)
+  balance           Int                @default(10000)
+  bannedAt          DateTime?          @map("banned_at")
+  telegramId        String?            @unique @map("telegram_id") // Chat id Telegram đã liên kết để nhận video qua bot
+  shopeeAffiliateId String?            @map("shopee_affiliate_id") // Affiliate ID Shopee của user, dùng để tạo link aff cho sản phẩm
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  products          Product[]
+  sites             Site[]
+  transactions      Transaction[]
+  refreshTokens     RefreshToken[]
+  apiKeys           ApiKey[]
+  videoJobs         VideoJob[]
+  socialConnections SocialConnection[]
+  facebookPages     FacebookPage[]
+  mediaAssets       MediaAsset[]
+  contentPosts      ContentPost[]
+  conversations     Conversation[]
+  aiActions         AiAction[]
 
   @@map("users")
 }
@@ -51,48 +57,48 @@ model Site {
 }
 
 model Product {
-  id            String        @id @default(cuid())
-  userId        String        @map("user_id")
-  sourceShop    String        @map("source_shop")
-  sourceUrl     String        @map("source_url")
-  title         String
-  description   String?
-  images        Json?
-  price         Int?          // Sale price (giá đã giảm)
-  originalPrice Int?          @map("original_price") // Regular price (giá gốc)
-  currency      String?
-  category      String?
-  status        ProductStatus @default(DRAFT)
-  errorMessage  String?       @map("error_message")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  categoryId    String?       @map("category_id")
-  needsMapping  Boolean       @default(false) @map("needs_mapping")
-  affiliateUrl  String?       @map("affiliate_url") // Link affiliate Shopee đã tạo từ sourceUrl
-  affiliateSubId String?      @map("affiliate_sub_id") // sub_id dùng khi tạo link (tracking nguồn)
-  user          User          @relation(fields: [userId], references: [id])
-  uploads       UploadJob[]
-  videoJobs     VideoJob[]
+  id             String        @id @default(cuid())
+  userId         String        @map("user_id")
+  sourceShop     String        @map("source_shop")
+  sourceUrl      String        @map("source_url")
+  title          String
+  description    String?
+  images         Json?
+  price          Int? // Sale price (giá đã giảm)
+  originalPrice  Int?          @map("original_price") // Regular price (giá gốc)
+  currency       String?
+  category       String?
+  status         ProductStatus @default(DRAFT)
+  errorMessage   String?       @map("error_message")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  categoryId     String?       @map("category_id")
+  needsMapping   Boolean       @default(false) @map("needs_mapping")
+  affiliateUrl   String?       @map("affiliate_url") // Link affiliate Shopee đã tạo từ sourceUrl
+  affiliateSubId String?       @map("affiliate_sub_id") // sub_id dùng khi tạo link (tracking nguồn)
+  user           User          @relation(fields: [userId], references: [id])
+  uploads        UploadJob[]
+  videoJobs      VideoJob[]
 
   @@map("products")
 }
 
 model VideoJob {
-  id           String    @id @default(cuid())
-  userId       String    @map("user_id")
-  productId    String    @map("product_id")
-  status       String    @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
-  style        String    @default("default") // template/kiểu video
-  caption      String?   // caption + hashtag để đăng social
-  videoUrl     String?   @map("video_url") // link mp4 kết quả
-  durationSec  Int?      @map("duration_sec")
-  cost         Int       @default(0) // số điểm đã trừ
-  errorMessage String?   @map("error_message")
-  retryCount   Int       @default(0) @map("retry_count")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  user         User      @relation(fields: [userId], references: [id])
-  product      Product   @relation(fields: [productId], references: [id])
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  productId    String   @map("product_id")
+  status       String   @default("PENDING") // PENDING | PROCESSING | DONE | FAILED
+  style        String   @default("default") // template/kiểu video
+  caption      String? // caption + hashtag để đăng social
+  videoUrl     String?  @map("video_url") // link mp4 kết quả
+  durationSec  Int?     @map("duration_sec")
+  cost         Int      @default(0) // số điểm đã trừ
+  errorMessage String?  @map("error_message")
+  retryCount   Int      @default(0) @map("retry_count")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id])
+  product      Product  @relation(fields: [productId], references: [id])
 
   @@index([userId])
   @@index([status])
@@ -131,17 +137,17 @@ model Transaction {
 }
 
 model WooCommerceCategory {
-  id               String            @id @default(cuid())
-  siteId           String            @map("site_id")
-  wooId            String            @map("woo_id")
-  name             String
-  slug             String?
-  parentId         String?           @map("parent_id")
-  count            Int               @default(0)
-  syncedAt         DateTime          @default(now()) @map("synced_at")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
-  site             Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  siteId    String   @map("site_id")
+  wooId     String   @map("woo_id")
+  name      String
+  slug      String?
+  parentId  String?  @map("parent_id")
+  count     Int      @default(0)
+  syncedAt  DateTime @default(now()) @map("synced_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 
   @@unique([siteId, wooId])
   @@map("woocommerce_categories")
@@ -163,9 +169,9 @@ model RefreshToken {
 model ApiKey {
   id          String    @id @default(cuid())
   key         String    @unique // Hashed API key
-  name        String    // User-defined name for the key
+  name        String // User-defined name for the key
   userId      String    @map("user_id")
-  permissions String[]  // Array of permissions: ["products:read", "products:write"]
+  permissions String[] // Array of permissions: ["products:read", "products:write"]
   lastUsedAt  DateTime? @map("last_used_at")
   expiresAt   DateTime? @map("expires_at") // Optional expiration
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -178,22 +184,22 @@ model ApiKey {
 }
 
 model AuditLog {
-  id          String   @id @default(cuid())
-  userId      String   @map("user_id")
-  userEmail   String   @map("user_email")
-  userRole    UserRole @map("user_role")
-  action      String   // e.g., "CREATE_SITE", "DELETE_PRODUCT", "UPDATE_USER"
-  resource    String   // e.g., "Site", "Product", "User"
-  resourceId  String?  @map("resource_id") // ID của resource bị thao tác
-  method      String   // HTTP method: GET, POST, PATCH, DELETE
-  endpoint    String   // API endpoint được gọi
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
-  requestBody Json?    @map("request_body") // Request payload (sensitive data filtered)
-  response    Json?    // Response data (optional)
-  status      Int      // HTTP status code
-  errorMessage String? @map("error_message")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  userEmail    String   @map("user_email")
+  userRole     UserRole @map("user_role")
+  action       String // e.g., "CREATE_SITE", "DELETE_PRODUCT", "UPDATE_USER"
+  resource     String // e.g., "Site", "Product", "User"
+  resourceId   String?  @map("resource_id") // ID của resource bị thao tác
+  method       String // HTTP method: GET, POST, PATCH, DELETE
+  endpoint     String // API endpoint được gọi
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  requestBody  Json?    @map("request_body") // Request payload (sensitive data filtered)
+  response     Json? // Response data (optional)
+  status       Int // HTTP status code
+  errorMessage String?  @map("error_message")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@index([userId])
   @@index([action])
@@ -201,7 +207,6 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
-
 
 model Setting {
   key       String   @id
@@ -222,4 +227,217 @@ enum ProductStatus {
   READY
   UPLOADED
   FAILED
+}
+
+// ─────────────────────── Mạng xã hội: kết nối, ảnh, bài đăng fanpage ───────────────────────
+
+enum SocialPlatform {
+  FACEBOOK
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  NEEDS_REAUTH // token hết hạn / bị thu hồi / thiếu quyền: người dùng phải kết nối lại
+}
+
+/// Kết nối tới một tài khoản mạng xã hội. Access token được mã hoá AES-256-GCM.
+model SocialConnection {
+  id             String           @id @default(cuid())
+  userId         String           @map("user_id")
+  platform       SocialPlatform   @default(FACEBOOK)
+  externalUserId String           @map("external_user_id")
+  displayName    String           @map("display_name")
+  encrypted      String // access token đã mã hoá
+  tokenExpiresAt DateTime?        @map("token_expires_at")
+  scopes         String[]
+  status         ConnectionStatus @default(ACTIVE)
+  lastError      String?          @map("last_error")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages FacebookPage[]
+
+  @@unique([userId, platform, externalUserId])
+  @@map("social_connections")
+}
+
+/// Fanpage người dùng quản lý. Đăng bài phải dùng Page access token riêng, không dùng token user.
+model FacebookPage {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  connectionId String   @map("connection_id")
+  externalId   String   @map("external_id")
+  name         String
+  category     String?
+  pictureUrl   String?  @map("picture_url")
+  encrypted    String // Page access token đã mã hoá
+  tasks        String[] // quyền trên Page: CREATE_CONTENT, MANAGE…
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection SocialConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  posts      ContentPost[]
+
+  @@unique([userId, externalId])
+  @@index([connectionId])
+  @@map("facebook_pages")
+}
+
+enum MediaSource {
+  UPLOAD
+  AI_GENERATED
+  PRODUCT // lấy từ ảnh sản phẩm đã cào về
+}
+
+/// Ảnh dùng cho bài đăng. File nằm trên đĩa (MEDIA_DIR), luôn chuẩn hoá về JPEG vì Facebook
+/// giới hạn PNG 1MB. Ảnh do AI tạo ghi lại prompt + model để tra lại sau.
+model MediaAsset {
+  id         String      @id @default(cuid())
+  userId     String      @map("user_id")
+  source     MediaSource
+  storageKey String      @map("storage_key")
+  mimeType   String      @map("mime_type")
+  bytes      Int
+  width      Int
+  height     Int
+  prompt     String?
+  model      String?
+  productId  String?     @map("product_id")
+  createdAt  DateTime    @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("media_assets")
+}
+
+enum ContentPostStatus {
+  DRAFT
+  PUBLISHING // đang gửi lên Facebook; chặn bấm đăng hai lần tạo bài trùng
+  SCHEDULED // đã hẹn giờ, Facebook tự đăng
+  PUBLISHED
+  FAILED
+}
+
+/// Bài viết fanpage soạn trong app. Hẹn giờ dùng tính năng lên lịch của chính Facebook
+/// nên máy chủ không cần job chạy nền để canh giờ đăng.
+model ContentPost {
+  id             String            @id @default(cuid())
+  userId         String            @map("user_id")
+  pageId         String?           @map("page_id")
+  productId      String?           @map("product_id") // bài tạo từ sản phẩm nào
+  message        String
+  link           String?
+  mediaIds       String[]          @map("media_ids") // thứ tự ảnh trong bài
+  status         ContentPostStatus @default(DRAFT)
+  scheduledAt    DateTime?         @map("scheduled_at")
+  publishedAt    DateTime?         @map("published_at")
+  externalPostId String?           @map("external_post_id") // "<pageId>_<postId>"
+  permalink      String?
+  error          String?
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  page FacebookPage? @relation(fields: [pageId], references: [id])
+
+  @@unique([userId, externalPostId])
+  @@index([userId, status, updatedAt])
+  @@map("content_posts")
+}
+
+// ─────────────────────── Trợ lý AI: hội thoại và thao tác có xác nhận ───────────────────────
+
+/// Một cuộc trò chuyện với trợ lý AI.
+model Conversation {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  title     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("conversations")
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  role           String // user | assistant
+  content        String
+  /// Các công cụ AI đã gọi: [{ name, summary }] — để người dùng biết câu trả lời dựa trên đâu.
+  toolCalls      Json     @default("[]") @map("tool_calls")
+  /// Điểm đã trừ cho lượt này (AI viết bài…).
+  cost           Int      @default(0)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  actions      AiAction[]
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+
+enum AiActionKind {
+  PUBLISH_POST // đăng hoặc hẹn giờ bài fanpage
+  DELETE_PAGE_POST // xoá bài trên fanpage
+  GENERATE_IMAGE // AI tạo ảnh (tốn điểm)
+  CREATE_VIDEO // tạo video từ sản phẩm (tốn điểm)
+  UPLOAD_PRODUCT // đăng sản phẩm lên site WooCommerce
+}
+
+enum AiActionStatus {
+  PROPOSED // chờ người dùng xác nhận
+  EXECUTING
+  EXECUTED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum AiActionSource {
+  CHAT
+  MCP
+  UI
+}
+
+/**
+ * Thao tác tốn tiền hoặc khó hoàn tác luôn đi hai bước: tạo ĐỀ XUẤT kèm những gì sẽ xảy ra,
+ * rồi mới THỰC HIỆN khi có xác nhận. Dùng chung cho chat AI, agent qua MCP và nút bấm trên web,
+ * nên phân quyền, giới hạn và nhật ký giống nhau ở mọi nơi.
+ */
+model AiAction {
+  id            String         @id @default(cuid())
+  userId        String         @map("user_id")
+  source        AiActionSource
+  kind          AiActionKind
+  status        AiActionStatus @default(PROPOSED)
+  chatMessageId String?        @map("chat_message_id")
+  /// Khoá API đã tạo đề xuất này (khi gọi qua MCP).
+  apiKeyId      String?        @map("api_key_id")
+  summary       String
+  /// Tham số đã kiểm tra, dùng nguyên văn khi thực hiện.
+  params        Json
+  /// Những gì sẽ thay đổi: [{ label, before, after }] và các cảnh báo.
+  preview       Json
+  result        Json?
+  error         String?
+  /// Số điểm sẽ bị trừ khi xác nhận (0 = không tốn điểm).
+  costPoints    Int            @default(0) @map("cost_points")
+  expiresAt     DateTime       @map("expires_at")
+  executedAt    DateTime?      @map("executed_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatMessage ChatMessage? @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([chatMessageId])
+  @@map("ai_actions")
 }

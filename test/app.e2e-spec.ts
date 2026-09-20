@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+// `import * as request` cho ra namespace của module CommonJS nên không gọi được như hàm;
+// với "module": "nodenext" + esModuleInterop thì phải import mặc định.
+import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 

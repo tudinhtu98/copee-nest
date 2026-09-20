@@ -11,5 +11,6 @@ import { ShopeeModule } from '../shopee/shopee.module';
   imports: [BillingModule, UploadModule, ApiKeysModule, AuthModule, ShopeeModule],
   providers: [ProductsService],
   controllers: [ProductsController],
+  exports: [ProductsService],
 })
 export class ProductsModule {}

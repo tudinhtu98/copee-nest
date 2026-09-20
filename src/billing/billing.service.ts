@@ -56,19 +56,24 @@ export class BillingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.findUnique({
-        where: { id: userId },
-        select: { id: true, balance: true },
+      // Trừ điểm ngay trong câu UPDATE có kèm điều kiện số dư: hai yêu cầu chạy song song
+      // không thể cùng đọc số dư cũ rồi cùng trừ, nên không bao giờ tiêu quá số dư đang có.
+      const claimed = await tx.user.updateMany({
+        where: { id: userId, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
       });
-      if (!user) {
-        throw new NotFoundException('Không tìm thấy người dùng');
-      }
-      if (user.balance < amount) {
+      if (!claimed.count) {
+        const exists = await tx.user.findUnique({
+          where: { id: userId },
+          select: { id: true },
+        });
+        if (!exists) {
+          throw new NotFoundException('Không tìm thấy người dùng');
+        }
         throw new BadRequestException('Số dư không đủ');
       }
-      const updated = await tx.user.update({
+      const updated = await tx.user.findUniqueOrThrow({
         where: { id: userId },
-        data: { balance: { decrement: amount } },
         select: { id: true, balance: true },
       });
       const transaction = await tx.transaction.create({

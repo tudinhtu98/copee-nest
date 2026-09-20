@@ -21,6 +21,8 @@ import { VideoModule } from './video/video.module';
 import { VideoBotModule } from './video-bot/video-bot.module';
 import { SettingsModule } from './settings/settings.module';
 import { ShopeeModule } from './shopee/shopee.module';
+import { SocialModule } from './social/social.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { ShopeeModule } from './shopee/shopee.module';
     VideoBotModule,
     SettingsModule,
     ShopeeModule,
+    SocialModule,
+    AiModule,
   ],
   controllers: [AppController],
   providers: [
